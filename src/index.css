@@ -37,13 +37,6 @@
     100% { transform: translateX(-120%); }
   }
 
-  @keyframes wind-gust-streak {
-    0% { transform: translateX(-200px) translateY(0px); opacity: 0; }
-    20% { opacity: 0.7; }
-    80% { opacity: 0.7; }
-    100% { transform: translateX(calc(100vw + 200px)) translateY(-30px); opacity: 0; }
-  }
-
   @keyframes palm-sway {
     0% { transform: rotate(0deg); }
     50% { transform: rotate(var(--wind-tilt, 6deg)); }
@@ -117,10 +110,6 @@
 
   .animate-cloud-l {
     animation: cloud-drift-left var(--cloud-period, 50s) linear infinite;
-  }
-
-  .animate-wind-streak {
-    animation: wind-gust-streak var(--wind-period, 4s) linear infinite;
   }
 
   .animate-palm-sway {

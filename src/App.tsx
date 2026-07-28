@@ -448,12 +448,12 @@ ${OCEAN_ANIMATIONS_CSS}
     <div class="cloud animate-cloud-r" style="top: 10%; --cloud-period: ${1200 / windSpeed}s"><div class="cloud-blob"></div></div>
     <div class="cloud animate-cloud-r" style="top: 22%; --cloud-period: ${1800 / windSpeed}s"><div class="cloud-blob"></div></div>
     <div class="wave-1 animate-wave-1" id="wave1" style="--wave-period: ${waveSpeed}s">
-      <svg width="100%" height="100%" viewBox="0 0 1200 120" preserveAspectRatio="none" fill="rgba(254, 243, 199, 0.35)">
+      <svg width="100%" height="100%" viewBox="0 0 1200 120" preserveAspectRatio="none" fill="rgba(254, 243, 199, 0.18)">
         <path d="M0,0 C150,90 350,-40 500,40 C650,110 900,10 1200,50 L1200,120 L0,120 Z"></path>
       </svg>
     </div>
     <div class="wave-2 animate-wave-2" id="wave2" style="--wave-period: ${waveSpeed}s">
-      <svg width="100%" height="100%" viewBox="0 0 1200 120" preserveAspectRatio="none" fill="rgba(255, 255, 255, 0.5)">
+      <svg width="100%" height="100%" viewBox="0 0 1200 120" preserveAspectRatio="none" fill="rgba(255, 255, 255, 0.25)">
         <path d="M0,30 C300,10 600,80 900,20 C1050,0 1150,40 1200,30 L1200,120 L0,120 Z"></path>
       </svg>
     </div>
@@ -665,20 +665,6 @@ ${oceanAudioSource}
           </div>
         ))}
 
-        {/* HORIZONTAL WIND STREAKS PASSING BY */}
-        {Array.from({ length: Math.min(8, Math.floor(windSpeed / 12)) }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute h-[2px] bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none animate-wind-streak blur-[0.5px]"
-            style={{
-              top: `${15 + (i * 12) % 60}%`,
-              width: `${120 + i * 40}px`,
-              '--wind-period': `${(100 / windSpeed) + i * 0.4}s`,
-              animationDelay: `${i * 0.7}s`
-            } as React.CSSProperties}
-          />
-        ))}
-
         {/* SEA SHIMMER & SUN LIGHT REFLECTION OVER WATER */}
         <div className="absolute top-[52%] inset-x-0 bottom-0 pointer-events-none bg-gradient-to-b from-amber-400/15 via-orange-500/10 to-transparent animate-water-shimmer mix-blend-soft-light" />
 
@@ -689,9 +675,10 @@ ${oceanAudioSource}
             background: timeOfDay === 'night'
               ? 'linear-gradient(to bottom, rgba(186,230,253,0.2) 0%, rgba(125,211,252,0.1) 40%, transparent 100%)'
               : `linear-gradient(to bottom, rgba(254,240,138,${(sunGlow / 100) * 0.45}) 0%, rgba(251,146,60,${(sunGlow / 100) * 0.25}) 50%, transparent 100%)`,
-            maskImage: 'linear-gradient(to bottom, black 10%, rgba(0,0,0,0.6) 60%, transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to bottom, black 10%, rgba(0,0,0,0.6) 60%, transparent 100%)',
-            filter: 'blur(12px)',
+            // Ellipszis maszk: oldalt is kifut, így nincs éles bal/jobb perem
+            maskImage: 'radial-gradient(ellipse 55% 100% at 50% 0%, black 0%, rgba(0,0,0,0.55) 50%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 55% 100% at 50% 0%, black 0%, rgba(0,0,0,0.55) 50%, transparent 100%)',
+            filter: 'blur(40px)',
           }}
         />
 
@@ -738,10 +725,10 @@ ${oceanAudioSource}
         {/* ROLLING SVG SHORELINE WAVES WITH HIGH VISIBILITY & CREST LIGHT POINTS */}
         {/* Wave 1: Rolling Crest */}
         <div 
-          className="absolute bottom-0 inset-x-0 h-44 pointer-events-none animate-wave-1 overflow-hidden"
+          className="absolute -bottom-8 inset-x-0 h-52 pointer-events-none animate-wave-1 overflow-hidden"
           style={{ '--wave-period': `${waveSpeed}s` } as React.CSSProperties}
         >
-          <svg className="w-full h-full text-amber-100/35 fill-current transform scale-y-125" viewBox="0 0 1200 120" preserveAspectRatio="none">
+          <svg className="w-full h-full text-amber-100/18 fill-current transform scale-y-125" viewBox="0 0 1200 120" preserveAspectRatio="none">
             <path d="M0,0 C150,90 350,-40 500,40 C650,110 900,10 1200,50 L1200,120 L0,120 Z"></path>
           </svg>
           {/* Dynamic Sparkle Points on Wave 1 Crest */}
@@ -768,10 +755,10 @@ ${oceanAudioSource}
 
         {/* Wave 2: Shore Foam Surge */}
         <div 
-          className="absolute bottom-0 inset-x-0 h-32 pointer-events-none animate-wave-2 overflow-hidden"
+          className="absolute -bottom-8 inset-x-0 h-40 pointer-events-none animate-wave-2 overflow-hidden"
           style={{ '--wave-period': `${waveSpeed}s` } as React.CSSProperties}
         >
-          <svg className="w-full h-full text-white/50 fill-current" viewBox="0 0 1200 120" preserveAspectRatio="none">
+          <svg className="w-full h-full text-white/25 fill-current" viewBox="0 0 1200 120" preserveAspectRatio="none">
             <path d="M0,30 C300,10 600,80 900,20 C1050,0 1150,40 1200,30 L1200,120 L0,120 Z"></path>
           </svg>
           {/* Dynamic Sparkle Points on Wave 2 Shore Surge Crest */}
@@ -798,10 +785,10 @@ ${oceanAudioSource}
 
         {/* Wave 3: White Foam Wash */}
         <div 
-          className="absolute bottom-0 inset-x-0 h-20 pointer-events-none animate-wave-foam"
+          className="absolute -bottom-8 inset-x-0 h-28 pointer-events-none animate-wave-foam"
           style={{ '--wave-period': `${waveSpeed}s` } as React.CSSProperties}
         >
-          <div className="w-full h-full bg-gradient-to-t from-white/70 via-white/30 to-transparent blur-sm" />
+          <div className="w-full h-full bg-gradient-to-t from-white/35 via-white/15 to-transparent blur-sm" />
         </div>
 
         {/* SWAYING PALM LEAF SILHOUETTE RESPONDING TO WIND */}
