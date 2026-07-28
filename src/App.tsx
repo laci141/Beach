@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Volume2, VolumeX, Wind, Waves, Sun, Maximize, Minimize, 
+import {
+  Volume2, VolumeX, Wind, Waves, Sun, Maximize, Minimize,
   Play, Pause, Sparkles, Image, Clock, Info, Sliders, Compass, Download,
-  CloudRain, Mountain, Anchor
+  CloudRain, Mountain, Anchor,
+  type LucideIcon
 } from 'lucide-react';
 
 // Imported generated image assets
@@ -14,6 +15,209 @@ import lagoonImg from './assets/images/tropical_lagoon_1785172300785.webp';
 import { createOceanAudio, type OceanAudio, type OceanSoundType } from './audio/oceanAudio.js';
 import oceanAudioSource from './audio/oceanAudio.js?raw';
 import appStylesSource from './index.css?raw';
+
+export type Lang = 'hu' | 'en' | 'ro' | 'de';
+
+/** Egy szöveg mind a négy nyelven. Az adattömbök nyelvi mezői is ilyenek. */
+type LangMap = Record<Lang, string>;
+
+const LANGS: Lang[] = ['hu', 'en', 'ro', 'de'];
+const LANG_STORAGE_KEY = 'gallery-lang';
+
+const isLang = (v: string | null | undefined): v is Lang =>
+  !!v && (LANGS as string[]).includes(v);
+
+/**
+ * Kezdeti nyelv: mentett választás → böngésző nyelve → magyar.
+ * A useState inicializálójából hívjuk, ezért lazy és SSR-biztos.
+ */
+const detectInitialLang = (): Lang => {
+  try {
+    const saved = localStorage.getItem(LANG_STORAGE_KEY);
+    if (isLang(saved)) return saved;
+  } catch {
+    // privát mód / letiltott storage — a böngésző nyelvére esünk vissza
+  }
+  const nav = typeof navigator !== 'undefined' ? navigator.language.slice(0, 2).toLowerCase() : '';
+  return isLang(nav) ? nav : 'hu';
+};
+
+/**
+ * Központi fordítási szótár. Kulcsonként egymás mellett a négy nyelv,
+ * hogy egy szöveg összes változata egy helyen legyen lektorálható.
+ */
+const T = {
+  zenHint: {
+    hu: 'Kattints az ablakra a hullámokhoz',
+    en: 'Click screen for ripples',
+    ro: 'Apasă pe ecran pentru valuri',
+    de: 'Klicke auf den Bildschirm für Wellen'
+  },
+  exit: { hu: 'Kilépés', en: 'Exit', ro: 'Ieșire', de: 'Beenden' },
+  title: {
+    hu: 'Naplementés Tengerpart & Hullámok',
+    en: 'Ocean Sunset & Live Waves',
+    ro: 'Apus pe Litoral & Valuri Vii',
+    de: 'Sonnenuntergang & Lebendige Wellen'
+  },
+  subtitle: {
+    hu: 'Élő hullámzás, szélmozgás és mélységélesség elmosódás',
+    en: 'Dynamic waves, breeze motion & depth-of-field blur',
+    ro: 'Valuri dinamice, briză și estompare a orizontului',
+    de: 'Dynamische Wellen, Wind und Tiefenunschärfe'
+  },
+  downloadTitle: {
+    hu: 'Letöltés önálló HTML fájlként (hanggal)',
+    en: 'Download as offline HTML file (with audio)',
+    ro: 'Descarcă ca fișier HTML independent (cu sunet)',
+    de: 'Als eigenständige HTML-Datei herunterladen (mit Ton)'
+  },
+  downloadBtn: {
+    hu: 'Letöltés HTML-ként',
+    en: 'Export HTML',
+    ro: 'Descarcă HTML',
+    de: 'Als HTML exportieren'
+  },
+  soundOn: { hu: 'Hang Be', en: 'Sound On', ro: 'Sunet Pornit', de: 'Ton An' },
+  playSound: { hu: 'Hang Indítása', en: 'Play Sound', ro: 'Pornește Sunetul', de: 'Ton Abspielen' },
+  zenView: { hu: 'Zen Képernyő', en: 'Zen View', ro: 'Mod Zen', de: 'Zen-Ansicht' },
+  tabControls: {
+    hu: 'Beállítások & Hang',
+    en: 'Controls & Audio',
+    ro: 'Setări & Sunet',
+    de: 'Einstellungen & Ton'
+  },
+  tabPresets: { hu: 'Hangulatok', en: 'Presets', ro: 'Atmosfere', de: 'Stimmungen' },
+  tabGallery: { hu: 'Tengeri Képek', en: 'Seascapes', ro: 'Peisaje Marine', de: 'Meeresbilder' },
+  tabTimer: { hu: 'Meditáció', en: 'Timer', ro: 'Meditație', de: 'Meditation' },
+  soundSection: {
+    hu: 'Tengeri Hang Típusa & Karakter',
+    en: 'Ocean Sound Profile & Ambience',
+    ro: 'Tipul și Caracterul Sunetului Marin',
+    de: 'Meeresklang-Profil & Charakter'
+  },
+  windLabel: {
+    hu: 'Szélsebesség & Horizont Mélységélesség',
+    en: 'Wind Speed & Horizon Depth-of-Field',
+    ro: 'Viteza Vântului & Estomparea Orizontului',
+    de: 'Windgeschwindigkeit & Tiefenschärfe'
+  },
+  windMin: {
+    hu: 'Csendes szellő (Éles horizont)',
+    en: 'Gentle breeze (Sharp horizon)',
+    ro: 'Briză lină (orizont clar)',
+    de: 'Sanfte Brise (scharfer Horizont)'
+  },
+  windMax: {
+    hu: 'Erős tengeri szél (Mélységélességi elmosódás)',
+    en: 'Gale (Heavy DOF blur)',
+    ro: 'Vânt puternic (estompare intensă)',
+    de: 'Starker Seewind (starke Unschärfe)'
+  },
+  waveLabel: {
+    hu: 'Hullámhang Ritmusa (Morajlás Periódusa)',
+    en: 'Wave Sound Rhythm (Swell Period)',
+    ro: 'Ritmul Sunetului Valurilor (Perioada Freamătului)',
+    de: 'Wellenklang-Rhythmus (Rauschperiode)'
+  },
+  waveMin: {
+    hu: 'Sűrű, gyors morajlás',
+    en: 'Fast, dense swell',
+    ro: 'Freamăt des și rapid',
+    de: 'Dichtes, schnelles Rauschen'
+  },
+  waveMax: {
+    hu: 'Lassú, mély lélegzés',
+    en: 'Slow, deep breathing',
+    ro: 'Respirație lentă, adâncă',
+    de: 'Langsames, tiefes Atmen'
+  },
+  sunLabel: {
+    hu: 'Napsütés Intenzitása & Víz Csillogás',
+    en: 'Sunshine Intensity & Sea Sparkle',
+    ro: 'Intensitatea Soarelui & Sclipirea Apei',
+    de: 'Sonnenintensität & Wasserglitzern'
+  },
+  sunMin: { hu: 'Finom fénypontok', en: 'Soft glints', ro: 'Puncte fine de lumină', de: 'Feine Lichtpunkte' },
+  sunMax: {
+    hu: 'Szikrázó vízfelszín & taraj csillogás',
+    en: 'Dazzling sparkles & crest glints',
+    ro: 'Apă scânteietoare',
+    de: 'Funkelnde Wasseroberfläche'
+  },
+  moodLabel: {
+    hu: 'Naplemente Színvilág & Hangulat',
+    en: 'Sunset Lighting & Atmosphere',
+    ro: 'Culorile Apusului & Atmosferă',
+    de: 'Sonnenuntergangs-Farben & Stimmung'
+  },
+  presetsIntro: {
+    hu: 'Válassz egy előre beállított tengeri hangulatot:',
+    en: 'Choose a handcrafted coastal mood preset:',
+    ro: 'Alege o atmosferă marină presetată:',
+    de: 'Wähle eine voreingestellte Meeresstimmung:'
+  },
+  galleryIntro: {
+    hu: 'Válassz a gyönyörű nagyfelbontású tengerparti tájképek közül:',
+    en: 'Select from high-definition seascape captures:',
+    ro: 'Alege dintre peisajele marine de înaltă rezoluție:',
+    de: 'Wähle aus den hochauflösenden Meereslandschaften:'
+  },
+  meditationActive: {
+    hu: 'Nyugtató meditáció folyamatban...',
+    en: 'Meditation session in progress...',
+    ro: 'Meditație în desfășurare...',
+    de: 'Meditation läuft...'
+  },
+  timerIntro: {
+    hu: 'Állítsd be a meditációs időtartamot:',
+    en: 'Set your relaxation timer:',
+    ro: 'Setează durata meditației:',
+    de: 'Stelle die Meditationsdauer ein:'
+  },
+  minutes: { hu: 'perc', en: 'min', ro: 'min', de: 'Min.' },
+  startSession: {
+    hu: 'Meditáció Indítása',
+    en: 'Start Session',
+    ro: 'Începe Meditația',
+    de: 'Meditation Starten'
+  },
+  stopTimer: {
+    hu: 'Időzítő Leállítása',
+    en: 'Stop Timer',
+    ro: 'Oprește Cronometrul',
+    de: 'Timer Stoppen'
+  },
+  rippleHint: {
+    hu: 'Kattints a tengerre vízhullámok keltéséhez!',
+    en: 'Click sea to generate ripples!',
+    ro: 'Apasă pe mare pentru valuri!',
+    de: 'Klicke aufs Meer für Wellenringe!'
+  },
+
+  // --- Az alábbi kulcsok nem voltak a kapott listában, saját fordítás (lektorálandó) ---
+  dofBlur: { hu: 'Horizont elmosódás', en: 'DOF blur', ro: 'Estompare orizont', de: 'Horizontunschärfe' },
+  windShort: { hu: 'Szél', en: 'Wind', ro: 'Vânt', de: 'Wind' },
+  waveShort: { hu: 'Hullám', en: 'Wave', ro: 'Val', de: 'Welle' },
+  exportTitle: {
+    hu: 'Naplementés Tengerpart & Mélységélesség Elmosódás',
+    en: 'Ocean Sunset & Depth-of-Field Blur',
+    ro: 'Apus pe Litoral & Estomparea Orizontului',
+    de: 'Sonnenuntergang & Tiefenunschärfe'
+  },
+  soundTypeLabel: {
+    hu: 'Tengeri Hang Típusa',
+    en: 'Ocean Sound Type',
+    ro: 'Tipul Sunetului Marin',
+    de: 'Meeresklang-Typ'
+  },
+  muteSound: {
+    hu: 'Hang Némítása',
+    en: 'Mute Sound',
+    ro: 'Oprește Sunetul',
+    de: 'Ton Stummschalten'
+  }
+} satisfies Record<string, LangMap>;
 
 interface Ripple {
   id: number;
@@ -31,8 +235,7 @@ interface CloudLayer {
 }
 
 interface Preset {
-  nameHu: string;
-  nameEn: string;
+  name: LangMap;
   windSpeed: number;
   waveSpeed: number;
   waveVolume: number;
@@ -44,10 +247,50 @@ interface Preset {
 // A hangprofilok halmazát a hangmotor definiálja
 type SoundType = OceanSoundType;
 
+/**
+ * Hangprofilok feliratai. Modulszinten, mert a vezérlőpult ÉS a standalone
+ * export is ebből dolgozik — így az exportált HTML is a választott nyelven szól.
+ */
+const SOUND_PROFILE_META: { id: SoundType; label: LangMap; desc: LangMap; icon: LucideIcon }[] = [
+  {
+    id: 'sandy',
+    label: { hu: 'Homokos Part', en: 'Sandy Shore', ro: 'Plajă cu Nisip', de: 'Sandstrand' },
+    desc: { hu: 'Lágy morajlás', en: 'Gentle swell', ro: 'Freamăt blând', de: 'Sanftes Rauschen' },
+    icon: Waves
+  },
+  {
+    id: 'rocky',
+    label: { hu: 'Sziklás Part', en: 'Rocky Shore', ro: 'Țărm Stâncos', de: 'Felsenküste' },
+    desc: { hu: 'Erősebb tajték', en: 'Crashing splash', ro: 'Spumă puternică', de: 'Kräftige Gischt' },
+    icon: Mountain
+  },
+  {
+    id: 'ocean',
+    label: { hu: 'Nyílt Óceán', en: 'Open Ocean', ro: 'Ocean Deschis', de: 'Offener Ozean' },
+    desc: {
+      hu: 'Mély, basszusos morajlás',
+      en: 'Deep bass swell',
+      ro: 'Freamăt profund',
+      de: 'Tiefes Bass-Rauschen'
+    },
+    icon: Anchor
+  },
+  {
+    id: 'rain',
+    label: { hu: 'Eső a Tengeren', en: 'Rain at Sea', ro: 'Ploaie pe Mare', de: 'Regen auf See' },
+    desc: { hu: 'Enyhe esőkopogás', en: 'Light rainfall', ro: 'Ropot ușor', de: 'Leises Prasseln' },
+    icon: CloudRain
+  }
+];
+
 const PRESETS: Preset[] = [
   {
-    nameHu: 'Nyugtató Aranyóra',
-    nameEn: 'Calming Golden Hour',
+    name: {
+      hu: 'Nyugtató Aranyóra',
+      en: 'Calming Golden Hour',
+      ro: 'Oră de Aur Liniștitoare',
+      de: 'Beruhigende Goldene Stunde'
+    },
     windSpeed: 25,
     waveSpeed: 4.5,
     waveVolume: 0.6,
@@ -56,8 +299,12 @@ const PRESETS: Preset[] = [
     sunGlow: 90
   },
   {
-    nameHu: 'Sziklás Part & Viharos Hullámok',
-    nameEn: 'Rocky Shore & Crashing Waves',
+    name: {
+      hu: 'Sziklás Part & Viharos Hullámok',
+      en: 'Rocky Shore & Crashing Waves',
+      ro: 'Țărm Stâncos & Valuri Furtunoase',
+      de: 'Felsenküste & Stürmische Wellen'
+    },
     windSpeed: 65,
     waveSpeed: 2.8,
     waveVolume: 0.85,
@@ -66,8 +313,12 @@ const PRESETS: Preset[] = [
     sunGlow: 75
   },
   {
-    nameHu: 'Csendes Eső a Tengeren',
-    nameEn: 'Tranquil Rain on Ocean',
+    name: {
+      hu: 'Csendes Eső a Tengeren',
+      en: 'Tranquil Rain on Ocean',
+      ro: 'Ploaie Liniștită pe Mare',
+      de: 'Stiller Regen auf dem Meer'
+    },
     windSpeed: 30,
     waveSpeed: 5.0,
     waveVolume: 0.7,
@@ -76,8 +327,12 @@ const PRESETS: Preset[] = [
     sunGlow: 40
   },
   {
-    nameHu: 'Mély Nyílt Óceán',
-    nameEn: 'Deep Open Ocean Swell',
+    name: {
+      hu: 'Mély Nyílt Óceán',
+      en: 'Deep Open Ocean Swell',
+      ro: 'Ocean Adânc',
+      de: 'Tiefe Ozeandünung'
+    },
     windSpeed: 15,
     waveSpeed: 7.5,
     waveVolume: 0.5,
@@ -168,8 +423,23 @@ const extractUtilitiesLayer = (css: string): string => {
 const OCEAN_ANIMATIONS_CSS = extractUtilitiesLayer(appStylesSource);
 
 export default function App() {
-  // Language state
-  const [lang, setLang] = useState<'hu' | 'en'>('hu');
+  // Language state — mentett választás, különben a böngésző nyelve, különben magyar
+  const [lang, setLang] = useState<Lang>(detectInitialLang);
+
+  useEffect(() => {
+    // A dokumentum nyelve is kövesse: képernyőolvasó, elválasztás, helyesírás-ellenőrzés
+    document.documentElement.lang = lang;
+    try {
+      localStorage.setItem(LANG_STORAGE_KEY, lang);
+    } catch {
+      // privát mód: a nyelv csak a munkamenetre marad meg
+    }
+  }, [lang]);
+
+  /** Szótárkulcs feloldása az aktuális nyelvre. */
+  const t = (k: keyof typeof T) => T[k][lang];
+  /** Adattömbök nyelvi mezőinek feloldása (title, name, label, desc). */
+  const tr = (m: LangMap) => m[lang];
 
   // Visual Scene state
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -181,8 +451,14 @@ export default function App() {
   const images = [
     {
       src: sunsetBeachImg,
-      titleHu: 'Aranylemente & Hullámzó Tengerpart', titleEn: 'Golden Sunset & Rolling Shoreline',
-      sunX: 34, sunY: 44, sunStrength: 1.0,
+      title: {
+        hu: 'Aranynaplemente & Hullámzó Tengerpart',
+        en: 'Golden Sunset & Rolling Shoreline',
+        ro: 'Apus Auriu & Țărm cu Valuri',
+        de: 'Goldener Sonnenuntergang'
+      },
+      // Chrome-ban rácson kimért napkorong-pozíció
+      sunX: 39, sunY: 39, sunStrength: 1.0,
       // Mérve: horizont y41%, jobbra a sziklás fok y46%-ig, a partvonal átlósan
       // fut a jobb felsőtől a bal alsóig, bal alul a füves dűne zárja.
       waterTop: 41, waterBottom: 74,
@@ -190,8 +466,14 @@ export default function App() {
     },
     {
       src: seascapeImg,
-      titleHu: 'Bíbor Alkonyat a Tenger felett', titleEn: 'Purple Twilight over Ocean',
-      sunX: 46, sunY: 40, sunStrength: 0.7,
+      title: {
+        hu: 'Bíbor Alkonyat a Tenger felett',
+        en: 'Purple Twilight over Ocean',
+        ro: 'Amurg Purpuriu peste Ocean',
+        de: 'Purpurne Dämmerung über dem Meer'
+      },
+      // Kimérve: a horizonton a legfényesebb folt és a tükröződés oszlopa
+      sunX: 66, sunY: 38, sunStrength: 0.7,
       // Mérve: horizont y37%, balra pálmás part és sziklák, a partvonal átlósan
       // fut a bal felsőtől a jobb alsóig; a lagúna a jobb oldalt tölti ki az aljáig.
       waterTop: 39, waterBottom: 94,
@@ -199,8 +481,14 @@ export default function App() {
     },
     {
       src: lagoonImg,
-      titleHu: 'Napsütéses Trópusi Lagúna', titleEn: 'Sunny Tropical Lagoon',
-      sunX: 51, sunY: 37, sunStrength: 0.25,
+      title: {
+        hu: 'Napsütéses Trópusi Lagúna',
+        en: 'Sunny Tropical Lagoon',
+        ro: 'Lagună Tropicală Însorită',
+        de: 'Sonnige Tropische Lagune'
+      },
+      // Délidő, nincs látható napkorong — a legfényesebb sekély vízsáv közepe
+      sunX: 60, sunY: 42, sunStrength: 0.25,
       // Mérve: horizont y30%, a bungalós sziget alja y36%, jobbra a fehér homokpad
       // átlósan y58%-ig. Alatta végig lagúna, a jobb alsó sarokban is.
       waterTop: 32, waterBottom: 96,
@@ -367,7 +655,7 @@ export default function App() {
   useEffect(() => {
     const timers = rippleTimersRef.current;
     return () => {
-      timers.forEach((t) => clearTimeout(t));
+      timers.forEach((timer) => clearTimeout(timer));
       timers.clear();
     };
   }, []);
@@ -452,11 +740,11 @@ export default function App() {
         const base64Image = reader.result as string;
 
         const standaloneHtml = `<!DOCTYPE html>
-<html lang="hu">
+<html lang="${lang}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Naplementés Tengerpart & Mélységélesség Elmosódás</title>
+  <title>${t('exportTitle')}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -527,25 +815,22 @@ ${OCEAN_ANIMATIONS_CSS}
 
   <div class="controls">
     <div class="row">
-      <span>Tengeri Hang Típusa:</span>
+      <span>${t('soundTypeLabel')}:</span>
       <select id="soundTypeSel">
-        <option value="sandy" ${soundType === 'sandy' ? 'selected' : ''}>Homokos Part</option>
-        <option value="rocky" ${soundType === 'rocky' ? 'selected' : ''}>Sziklás Part</option>
-        <option value="ocean" ${soundType === 'ocean' ? 'selected' : ''}>Nyílt Óceán</option>
-        <option value="rain" ${soundType === 'rain' ? 'selected' : ''}>Eső a Tengeren</option>
+${SOUND_PROFILE_META.map((p) => `        <option value="${p.id}" ${soundType === p.id ? 'selected' : ''}>${tr(p.label)}</option>`).join('\n')}
       </select>
-      <button id="soundBtn">Hang Indítása 🔊</button>
+      <button id="soundBtn">${t('playSound')} 🔊</button>
     </div>
     <div>
-      <div class="row"><span>Szélsebesség (Sztatikus & Elmosódás):</span><span id="windVal">${windSpeed} km/h</span></div>
+      <div class="row"><span>${t('windLabel')}:</span><span id="windVal">${windSpeed} km/h</span></div>
       <input type="range" id="windSlider" min="5" max="100" value="${windSpeed}">
     </div>
     <div>
-      <div class="row"><span>Hullámhang Ritmusa:</span><span id="waveVal">${waveSpeed}s</span></div>
+      <div class="row"><span>${t('waveLabel')}:</span><span id="waveVal">${waveSpeed}s</span></div>
       <input type="range" id="waveSlider" min="1.5" max="8" step="0.1" value="${waveSpeed}">
     </div>
     <div>
-      <div class="row"><span>Napsütés Intenzitása (Csillogás):</span><span id="sunVal">${sunGlow}%</span></div>
+      <div class="row"><span>${t('sunLabel')}:</span><span id="sunVal">${sunGlow}%</span></div>
       <input type="range" id="sunSlider" min="10" max="100" value="${sunGlow}">
     </div>
   </div>
@@ -595,7 +880,7 @@ ${oceanAudioSource}
         }, 350);
         isPlaying = false;
       }
-      soundBtn.textContent = isPlaying ? 'Hang Némítása 🔇' : 'Hang Indítása 🔊';
+      soundBtn.textContent = isPlaying ? ${JSON.stringify(t('muteSound') + ' 🔇')} : ${JSON.stringify(t('playSound') + ' 🔊')};
     });
 
     soundTypeSel.addEventListener('change', (e) => {
@@ -807,9 +1092,10 @@ ${oceanAudioSource}
             const sparkleScale = Math.max(0.95, sparkle.baseScale * (0.75 + (sunGlow / 100) * 0.25)).toFixed(2);
             // Opacitás-padló: közepes napnál is látszik. A sunStrength SZÁNDÉKOSAN nem
             // szorozza — a lagúnán nincs látható napkorong, de csillámösvény van.
+            // Az ambientFactor sem: azt a konténer opacitása adja (egyszer, nem négyzetesen).
             const maxOpacity = Math.min(
               1,
-              (0.35 + (sunGlow / 100) * 0.6) * ambientFactor * (isCorridorSparkle ? 1 : 0.7) * (isBloomSparkle ? 0.6 : 1)
+              (0.35 + (sunGlow / 100) * 0.6) * (isCorridorSparkle ? 1 : 0.7) * (isBloomSparkle ? 0.6 : 1)
             );
             const pointSizePx = isBloomSparkle ? sparkle.bloomSizePx : sparkle.sizePx;
             return (
@@ -880,13 +1166,13 @@ ${oceanAudioSource}
         {/* ZEN MODE EXIT BUTTON */}
         {isZenMode && (
           <div className="absolute top-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-slate-900/70 backdrop-blur-md border border-white/10 text-xs text-slate-300 flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
-            <span>{lang === 'hu' ? 'Kattints az ablakra a hullámokhoz' : 'Click screen for ripples'}</span>
+            <span>{t('zenHint')}</span>
             <button 
               onClick={() => setIsZenMode(false)}
               className={`ml-2 px-2.5 py-1 rounded-lg ${GLASS_ACTIVE} font-bold hover:bg-amber-400/25 transition-colors`}
             >
               <Minimize className="w-3.5 h-3.5 inline mr-1" />
-              {lang === 'hu' ? 'Kilépés' : 'Exit'}
+              {t('exit')}
             </button>
           </div>
         )}
@@ -901,11 +1187,11 @@ ${oceanAudioSource}
             </div>
             <div>
               <h1 className="text-lg md:text-xl font-bold tracking-tight bg-gradient-to-r from-amber-200 via-orange-100 to-amber-300 bg-clip-text text-transparent">
-                {lang === 'hu' ? 'Naplementés Tengerpart & Hullámok' : 'Ocean Sunset & Live Waves'}
+                {t('title')}
               </h1>
               <p className="text-xs text-slate-300/80 flex items-center gap-1.5 font-medium">
                 <Compass className="w-3.5 h-3.5 text-amber-400" />
-                {lang === 'hu' ? 'Élő hullámzás, szélmozgás és mélységélesség elmosódás' : 'Dynamic waves, breeze motion & depth-of-field horizon blur'}
+                {t('subtitle')}
               </p>
             </div>
           </div>
@@ -915,10 +1201,10 @@ ${oceanAudioSource}
             <button
               onClick={downloadStandaloneHtml}
               className={`px-3 py-2 rounded-xl ${GLASS_ACTIVE} hover:bg-amber-400/25 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md`}
-              title={lang === 'hu' ? 'Letöltés önálló HTML fájlként (hanggal)' : 'Download as offline HTML file (with audio)'}
+              title={t('downloadTitle')}
             >
               <Download className="w-4 h-4 text-amber-400" />
-              <span className="hidden sm:inline">{lang === 'hu' ? 'Letöltés HTML-ként' : 'Export HTML'}</span>
+              <span className="hidden sm:inline">{t('downloadBtn')}</span>
             </button>
 
             {/* Audio Toggle */}
@@ -932,23 +1218,33 @@ ${oceanAudioSource}
             >
               {isPlayingAudio ? <Volume2 className="w-4 h-4 animate-pulse" /> : <VolumeX className="w-4 h-4" />}
               <span className="hidden sm:inline">
-                {isPlayingAudio ? (lang === 'hu' ? 'Hang Be' : 'Sound On') : (lang === 'hu' ? 'Hang Indítása' : 'Play Sound')}
+                {isPlayingAudio ? t('soundOn') : t('playSound')}
               </span>
             </button>
 
-            {/* Language Switcher */}
-            <button
-              onClick={() => setLang(lang === 'hu' ? 'en' : 'hu')}
-              className="px-2.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700/60 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
-            >
-              {lang === 'hu' ? 'EN' : 'HU'}
-            </button>
+            {/* Language Switcher — négy nyelv, az aktívon az egységes üveg-stílus */}
+            <div className="flex items-center gap-1">
+              {LANGS.map((code) => (
+                <button
+                  key={code}
+                  onClick={() => setLang(code)}
+                  aria-pressed={lang === code}
+                  className={`px-2 py-1.5 rounded-lg text-[11px] font-bold uppercase transition-all ${
+                    lang === code
+                      ? GLASS_ACTIVE
+                      : 'border border-slate-700/60 bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  {code}
+                </button>
+              ))}
+            </div>
 
             {/* Zen Mode */}
             <button
               onClick={() => setIsZenMode(true)}
               className="p-2 rounded-xl bg-slate-900/80 border border-slate-700/60 text-slate-300 hover:text-amber-300 hover:bg-slate-800 transition-all"
-              title={lang === 'hu' ? 'Zen Képernyő' : 'Zen View'}
+              title={t('zenView')}
             >
               <Maximize className="w-4 h-4" />
             </button>
@@ -971,7 +1267,7 @@ ${oceanAudioSource}
               }`}
             >
               <Sliders className="w-3.5 h-3.5" />
-              <span>{lang === 'hu' ? 'Beállítások & Hang' : 'Controls & Audio'}</span>
+              <span>{t('tabControls')}</span>
             </button>
 
             <button
@@ -983,7 +1279,7 @@ ${oceanAudioSource}
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>{lang === 'hu' ? 'Hangulatok' : 'Presets'}</span>
+              <span>{t('tabPresets')}</span>
             </button>
 
             <button
@@ -995,7 +1291,7 @@ ${oceanAudioSource}
               }`}
             >
               <Image className="w-3.5 h-3.5" />
-              <span>{lang === 'hu' ? 'Tengeri Képek' : 'Seascapes'}</span>
+              <span>{t('tabGallery')}</span>
             </button>
 
             <button
@@ -1007,7 +1303,7 @@ ${oceanAudioSource}
               }`}
             >
               <Clock className="w-3.5 h-3.5" />
-              <span>{lang === 'hu' ? 'Meditáció' : 'Timer'}</span>
+              <span>{t('tabTimer')}</span>
             </button>
           </div>
 
@@ -1022,43 +1318,10 @@ ${oceanAudioSource}
                 <div>
                   <label className="block text-xs font-medium text-amber-300 mb-2 flex items-center gap-1.5">
                     <Volume2 className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{lang === 'hu' ? 'Tengeri Hang Típusa & Karakter' : 'Ocean Sound Profile & Ambience'}</span>
+                    <span>{t('soundSection')}</span>
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[
-                      { 
-                        id: 'sandy', 
-                        labelHu: 'Homokos Part', 
-                        labelEn: 'Sandy Shore', 
-                        descHu: 'Lágy morajlás', 
-                        descEn: 'Gentle swell',
-                        icon: Waves 
-                      },
-                      { 
-                        id: 'rocky', 
-                        labelHu: 'Sziklás Part', 
-                        labelEn: 'Rocky Shore', 
-                        descHu: 'Erősebb tajték', 
-                        descEn: 'Crashing splash',
-                        icon: Mountain 
-                      },
-                      { 
-                        id: 'ocean', 
-                        labelHu: 'Nyílt Óceán', 
-                        labelEn: 'Open Ocean', 
-                        descHu: 'Mély basszus swell', 
-                        descEn: 'Deep ocean bass',
-                        icon: Anchor 
-                      },
-                      { 
-                        id: 'rain', 
-                        labelHu: 'Eső a Tengeren', 
-                        labelEn: 'Rain on Sea', 
-                        descHu: 'Enyhe esőkopogás', 
-                        descEn: 'Gentle rain drops',
-                        icon: CloudRain 
-                      }
-                    ].map((type) => {
+                    {SOUND_PROFILE_META.map((type) => {
                       const IconComp = type.icon;
                       const isSelected = soundType === type.id;
                       return (
@@ -1073,12 +1336,12 @@ ${oceanAudioSource}
                         >
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-xs font-bold text-amber-200">
-                              {lang === 'hu' ? type.labelHu : type.labelEn}
+                              {tr(type.label)}
                             </span>
                             <IconComp className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
                           </div>
                           <span className="text-[10px] text-slate-400">
-                            {lang === 'hu' ? type.descHu : type.descEn}
+                            {tr(type.desc)}
                           </span>
                         </button>
                       );
@@ -1091,11 +1354,11 @@ ${oceanAudioSource}
                   <div className="flex justify-between text-xs font-medium mb-1.5 text-slate-300">
                     <span className="flex items-center gap-1.5 text-amber-300">
                       <Wind className="w-3.5 h-3.5 text-amber-400" />
-                      {lang === 'hu' ? 'Szélsebesség & Horizont Mélységélesség' : 'Wind Speed & Horizon Depth-of-Field'}
+                      {t('windLabel')}
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-amber-300/80 font-mono">
-                        {lang === 'hu' ? `Horizont elmosódás: ${horizonBlurPx.toFixed(1)}px` : `DOF Blur: ${horizonBlurPx.toFixed(1)}px`}
+                        {`${t('dofBlur')}: ${horizonBlurPx.toFixed(1)}px`}
                       </span>
                       <span className="text-amber-400 font-bold">{windSpeed} km/h</span>
                     </div>
@@ -1109,8 +1372,8 @@ ${oceanAudioSource}
                     className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
                   />
                   <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                    <span>{lang === 'hu' ? 'Csendes szellő (Éles horizont)' : 'Gentle breeze (Sharp horizon)'}</span>
-                    <span>{lang === 'hu' ? 'Erős tengeri szél (Mélységélességi elmosódás)' : 'Gale (Heavy DOF blur)'}</span>
+                    <span>{t('windMin')}</span>
+                    <span>{t('windMax')}</span>
                   </div>
                 </div>
 
@@ -1119,7 +1382,7 @@ ${oceanAudioSource}
                   <div className="flex justify-between text-xs font-medium mb-1.5 text-slate-300">
                     <span className="flex items-center gap-1.5 text-sky-300">
                       <Waves className="w-3.5 h-3.5 text-sky-400" />
-                      {lang === 'hu' ? 'Hullámhang Ritmusa (Morajlás Periódusa)' : 'Wave Sound Rhythm (Swell Sound Period)'}
+                      {t('waveLabel')}
                     </span>
                     <span className="text-sky-400 font-bold">{waveSpeed}s</span>
                   </div>
@@ -1133,8 +1396,8 @@ ${oceanAudioSource}
                     className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400"
                   />
                   <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                    <span>{lang === 'hu' ? 'Sűrű, gyors morajlás' : 'Fast, dense rumble'}</span>
-                    <span>{lang === 'hu' ? 'Lassú, mély lélegzés' : 'Slow, deep breathing'}</span>
+                    <span>{t('waveMin')}</span>
+                    <span>{t('waveMax')}</span>
                   </div>
                 </div>
 
@@ -1143,7 +1406,7 @@ ${oceanAudioSource}
                   <div className="flex justify-between text-xs font-medium mb-1.5 text-slate-300">
                     <span className="flex items-center gap-1.5 text-amber-300">
                       <Sun className="w-3.5 h-3.5 text-amber-400" />
-                      {lang === 'hu' ? 'Napsütés Intenzitása & Víz Csillogás' : 'Sunshine Intensity & Sea Sparkle'}
+                      {t('sunLabel')}
                     </span>
                     <span className="text-amber-400 font-bold">{sunGlow}%</span>
                   </div>
@@ -1156,22 +1419,38 @@ ${oceanAudioSource}
                     className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
                   />
                   <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                    <span>{lang === 'hu' ? 'Finom fénypontok' : 'Soft glints'}</span>
-                    <span>{lang === 'hu' ? 'Szikrázó vízfelszín & taraj csillogás' : 'Dazzling sparkles & crest glints'}</span>
+                    <span>{t('sunMin')}</span>
+                    <span>{t('sunMax')}</span>
                   </div>
                 </div>
 
                 {/* Sunset Color Scheme Selector */}
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-2">
-                    {lang === 'hu' ? 'Naplemente Színvilág & Hangulat' : 'Sunset Lighting & Atmosphere'}
+                    {t('moodLabel')}
                   </label>
                   <div className="grid grid-cols-4 gap-2">
                     {[
-                      { id: 'golden', labelHu: 'Aranyóra', labelEn: 'Golden', color: 'from-amber-500 to-orange-600' },
-                      { id: 'sunset', labelHu: 'Piros Végzet', labelEn: 'Vibrant Red', color: 'from-rose-600 to-amber-600' },
-                      { id: 'twilight', labelHu: 'Bíbor Alkony', labelEn: 'Purple Twilight', color: 'from-purple-600 to-indigo-700' },
-                      { id: 'night', labelHu: 'Csendes Éjszaka', labelEn: 'Night', color: 'from-slate-800 to-blue-950' }
+                      {
+                        id: 'golden',
+                        label: { hu: 'Aranyóra', en: 'Golden Hour', ro: 'Ora de Aur', de: 'Goldene Stunde' },
+                        color: 'from-amber-500 to-orange-600'
+                      },
+                      {
+                        id: 'sunset',
+                        label: { hu: 'Vörös Naplemente', en: 'Red Sunset', ro: 'Apus Roșu', de: 'Roter Sonnenuntergang' },
+                        color: 'from-rose-600 to-amber-600'
+                      },
+                      {
+                        id: 'twilight',
+                        label: { hu: 'Bíbor Alkony', en: 'Twilight', ro: 'Amurg Purpuriu', de: 'Purpurdämmerung' },
+                        color: 'from-purple-600 to-indigo-700'
+                      },
+                      {
+                        id: 'night',
+                        label: { hu: 'Csendes Éjszaka', en: 'Quiet Night', ro: 'Noapte Liniștită', de: 'Stille Nacht' },
+                        color: 'from-slate-800 to-blue-950'
+                      }
                     ].map((mode) => (
                       <button
                         key={mode.id}
@@ -1183,7 +1462,7 @@ ${oceanAudioSource}
                         }`}
                       >
                         <div className={`w-full h-2 rounded-full bg-gradient-to-r ${mode.color}`} />
-                        <span>{lang === 'hu' ? mode.labelHu : mode.labelEn}</span>
+                        <span>{tr(mode.label)}</span>
                       </button>
                     ))}
                   </div>
@@ -1212,7 +1491,7 @@ ${oceanAudioSource}
             {activeTab === 'presets' && (
               <div className="space-y-3">
                 <p className="text-xs text-slate-300 mb-2">
-                  {lang === 'hu' ? 'Válassz egy előre beállított tengeri hangulatot:' : 'Choose a handcrafted coastal mood preset:'}
+                  {t('presetsIntro')}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {PRESETS.map((preset, idx) => (
@@ -1223,10 +1502,10 @@ ${oceanAudioSource}
                     >
                       <div>
                         <h3 className="text-xs font-bold text-amber-200 group-hover:text-amber-300">
-                          {lang === 'hu' ? preset.nameHu : preset.nameEn}
+                          {tr(preset.name)}
                         </h3>
                         <p className="text-[10px] text-slate-300 mt-0.5">
-                          {lang === 'hu' ? `Szél: ${preset.windSpeed} km/h • Hullám: ${preset.waveSpeed}s` : `Wind: ${preset.windSpeed} km/h • Wave: ${preset.waveSpeed}s`}
+                          {`${t('windShort')}: ${preset.windSpeed} km/h • ${t('waveShort')}: ${preset.waveSpeed}s`}
                         </p>
                       </div>
                       <Sparkles className="w-3.5 h-3.5 text-amber-400 opacity-60 group-hover:opacity-100 transition-opacity" />
@@ -1240,7 +1519,7 @@ ${oceanAudioSource}
             {activeTab === 'gallery' && (
               <div className="space-y-3">
                 <p className="text-xs text-slate-300 mb-2">
-                  {lang === 'hu' ? 'Válassz a gyönyörű nagyfelbontású tengerparti tájképek közül:' : 'Select from high-definition seascape captures:'}
+                  {t('galleryIntro')}
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   {images.map((img, idx) => (
@@ -1253,10 +1532,10 @@ ${oceanAudioSource}
                           : 'border-slate-800 opacity-70 hover:opacity-100 hover:border-slate-600'
                       }`}
                     >
-                      <img src={img.src} alt={img.titleHu} className="w-full h-full object-cover" />
+                      <img src={img.src} alt={tr(img.title)} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent p-1.5 flex items-end">
                         <span className="text-[9px] font-semibold text-slate-200 line-clamp-1">
-                          {lang === 'hu' ? img.titleHu : img.titleEn}
+                          {tr(img.title)}
                         </span>
                       </div>
                     </button>
@@ -1274,8 +1553,8 @@ ${oceanAudioSource}
                   </span>
                   <p className="text-[11px] text-slate-300 mt-1">
                     {isTimerRunning 
-                      ? (lang === 'hu' ? 'Nyugtató meditáció folyamatban...' : 'Meditation session in progress...') 
-                      : (lang === 'hu' ? 'Állítsd be a meditációs időtartamot:' : 'Set your relaxation timer:')}
+                      ? t('meditationActive')
+                      : t('timerIntro')}
                   </p>
                 </div>
 
@@ -1292,7 +1571,7 @@ ${oceanAudioSource}
                               : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
                           }`}
                         >
-                          {m} {lang === 'hu' ? 'perc' : 'min'}
+                          {m} {t('minutes')}
                         </button>
                       ))}
                     </div>
@@ -1301,7 +1580,7 @@ ${oceanAudioSource}
                       className={`w-full py-2.5 rounded-xl ${GLASS_ACTIVE} font-bold text-xs shadow-lg shadow-amber-400/15 hover:bg-amber-400/25 transition-all flex items-center justify-center gap-2`}
                     >
                       <Play className="w-4 h-4 fill-current" />
-                      <span>{lang === 'hu' ? 'Meditáció Indítása' : 'Start Session'}</span>
+                      <span>{t('startSession')}</span>
                     </button>
                   </div>
                 ) : (
@@ -1310,7 +1589,7 @@ ${oceanAudioSource}
                     className="w-full py-2.5 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold text-xs hover:bg-rose-500/30 transition-all flex items-center justify-center gap-2"
                   >
                     <Pause className="w-4 h-4" />
-                    <span>{lang === 'hu' ? 'Időzítő Leállítása' : 'Stop Timer'}</span>
+                    <span>{t('stopTimer')}</span>
                   </button>
                 )}
               </div>
@@ -1324,7 +1603,7 @@ ${oceanAudioSource}
       {!isZenMode && (
         <div className="absolute bottom-1 right-4 z-10 hidden lg:flex items-center gap-1.5 text-[10px] text-slate-300 bg-slate-950/40 px-3 py-1 rounded-full backdrop-blur-sm">
           <Info className="w-3 h-3 text-amber-400" />
-          <span>{lang === 'hu' ? 'Kattints a tengerre vízhullámok keltéséhez!' : 'Click sea to generate ripples!'}</span>
+          <span>{t('rippleHint')}</span>
         </div>
       )}
 
