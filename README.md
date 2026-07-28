@@ -34,7 +34,7 @@ grading of the scene and the intensity of the water sparkles.
 image embedded as base64 and the full audio engine inlined. It works offline, with no
 server and no dependencies — just open it in a browser.
 
-**Bilingual.** Hungarian and English interface.
+**Four languages.** Hungarian, English, Romanian and German interface, with the choice remembered between visits.
 
 ---
 
