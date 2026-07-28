@@ -87,19 +87,59 @@ const PRESETS: Preset[] = [
   }
 ];
 
-// Pre-calculated water sparkle positions across the horizon & wave surface.
-// A fénycsóva ("corridor") csillanásai a naphoz képesti eltolással vannak tárolva,
-// mert a nap vízszintes helye képenként más — a többi a teljes szélességben szór.
-const WATER_SPARKLES = Array.from({ length: 42 }).map((_, i) => {
-  const isCorridor = i % 2 === 0;
-  const corridorOffset = -16 + ((i * 13) % 32) + (Math.sin(i) * 3); // -16% .. +16% a naptól
-  const left = 8 + ((i * 19) % 84); // csóván kívüli csillanás abszolút helye
-  const top = 48 + ((i * 7) % 42); // 48% to 90% vertical sea region
-  const baseScale = isCorridor ? 1.0 + (i % 4) * 0.25 : 0.6 + (i % 3) * 0.2;
-  const delay = (i * 0.17) % 2.8;
-  const duration = 1.6 + (i % 5) * 0.4;
-  return { id: i, corridorOffset, left, top, baseScale, delay, duration, isCorridor };
+/**
+ * Determinisztikus ál-véletlen 0..1 között. Azért nem Math.random(), hogy a
+ * csillámminta minden betöltéskor ugyanaz legyen (és ne ugráljon újrarendereléskor).
+ */
+const pseudoRandom = (seed: number) => {
+  const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+// Csillámösvény: a naptól a néző felé szélesedő kúp, tele apró fénypontokkal.
+// A korridor-pontok vízszintes helyét rendereléskor számoljuk a nap helyzetéből
+// (`lateral` × félszélesség), mert a nap képenként máshol van.
+const WATER_SPARKLES = Array.from({ length: 64 }).map((_, i) => {
+  const isCorridor = pseudoRandom(i + 0.5) < 0.55; // kb. 55% az ösvényben
+  const verticalT = pseudoRandom(i + 11.3); // 0..1: a tengersáv tetejétől az aljáig
+  const lateral = pseudoRandom(i + 23.7) * 2 - 1; // -1..1 egyenletes oldalirányú szórás
+  const scatterLeft = 8 + pseudoRandom(i + 41.1) * 84; // 8%..92% az ösvényen kívül
+  const sizePx = 2 + pseudoRandom(i + 57.9) * 3; // 2px..5px
+  const isBloom = i % 8 === 0; // minden nyolcadik nagyobb, halványabb, lágy udvarú folt
+  const bloomSizePx = 7 + pseudoRandom(i + 131.7) * 2; // 7px..9px
+  const isElongated = !isBloom && i % 3 === 0; // minden harmadik pont picit függőlegesen nyúlik
+  const duration = 0.9 + pseudoRandom(i + 71.3) * 1.3; // 0.9s..2.2s
+  const delay = pseudoRandom(i + 89.7) * 2.8; // 0s..2.8s, kevert eloszlás
+  const baseScale = isCorridor
+    ? 0.8 + pseudoRandom(i + 103.5) * 0.3
+    : 0.55 + pseudoRandom(i + 113.1) * 0.25;
+  return { id: i, isCorridor, verticalT, lateral, scatterLeft, sizePx, isBloom, bloomSizePx, isElongated, duration, delay, baseScale };
 });
+
+// Hosszan kifuttatott maszk: a blur-rétegek széle sehol nem ad éles vágásvonalat.
+// Csak a középső 10% teljes erejű, onnan mindkét irányba lágyan nullázódik.
+const HORIZON_MASK = 'linear-gradient(to bottom, transparent, black 45%, black 55%, transparent)';
+
+// A csillámösvény erőssége napszakonként — éjjel nincs nap, ami csillogjon.
+const AMBIENT_BY_TIME_OF_DAY = {
+  golden: 1.0,
+  sunset: 0.75,
+  twilight: 0.45,
+  night: 0.15
+} as const;
+
+// Borult ég (eső) gyakorlatilag megszünteti a csillámösvényt.
+const RAIN_AMBIENT_FACTOR = 0.15;
+
+// --- Üveg-panel (glass-panel) alapstílus ---
+// A Tailwind backdrop-blur-* a -webkit- előtagot is legenerálja, ezért itt elég a
+// segédosztály. Mobilon halkabb blur, md-től erősebb.
+const GLASS_PANEL =
+  'bg-slate-950/45 backdrop-blur-[11px] md:backdrop-blur-[15px] border border-white/10 rounded-2xl shadow-[0_18px_50px_-18px_rgba(0,0,0,0.75)]';
+
+// Egységes aktív/kijelölt állapot: soha nem tömör amber kitöltés, csak tónus + keret + szöveg.
+// FIGYELEM: panelen belüli elemre nem kerül backdrop-blur — beágyazva hatástalan és GPU-t eszik.
+const GLASS_ACTIVE = 'bg-amber-400/15 border border-amber-400/45 text-amber-200';
 
 /**
  * Kiemeli az index.css `@layer utilities { ... }` blokkjának tartalmát.
@@ -135,12 +175,39 @@ export default function App() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   // sunX / sunY: a nap (vagy a legfényesebb vízfelület) helye az adott képen, százalékban.
   // Ehhez igazodik a napkorong, a fénycsóva és a vízcsillanások pozíciója.
+  // sunStrength: mennyire látszik maga a nap az adott fotón (a lagúnán délben alig).
+  // waterTop / waterBottom: a víz függőleges sávja — a csillámösvény csak ide eshet.
+  // waterClip: a vízfelület kontúrja, hogy homokra / fűre / szigetre ne kerüljön csillanás.
   const images = [
-    { src: sunsetBeachImg, titleHu: 'Aranylemente & Hullámzó Tengerpart', titleEn: 'Golden Sunset & Rolling Shoreline', sunX: 34, sunY: 44 },
-    { src: seascapeImg, titleHu: 'Bíbor Alkonyat a Tenger felett', titleEn: 'Purple Twilight over Ocean', sunX: 46, sunY: 40 },
-    { src: lagoonImg, titleHu: 'Napsütéses Trópusi Lagúna', titleEn: 'Sunny Tropical Lagoon', sunX: 51, sunY: 37 }
+    {
+      src: sunsetBeachImg,
+      titleHu: 'Aranylemente & Hullámzó Tengerpart', titleEn: 'Golden Sunset & Rolling Shoreline',
+      sunX: 34, sunY: 44, sunStrength: 1.0,
+      // Mérve: horizont y41%, jobbra a sziklás fok y46%-ig, a partvonal átlósan
+      // fut a jobb felsőtől a bal alsóig, bal alul a füves dűne zárja.
+      waterTop: 41, waterBottom: 74,
+      waterClip: 'polygon(0% 41%, 58% 41%, 62% 46%, 90% 46%, 88% 52%, 80% 57%, 70% 62%, 60% 68%, 50% 73%, 42% 78%, 34% 74%, 28% 69%, 20% 64%, 10% 59%, 0% 53%)'
+    },
+    {
+      src: seascapeImg,
+      titleHu: 'Bíbor Alkonyat a Tenger felett', titleEn: 'Purple Twilight over Ocean',
+      sunX: 46, sunY: 40, sunStrength: 0.7,
+      // Mérve: horizont y37%, balra pálmás part és sziklák, a partvonal átlósan
+      // fut a bal felsőtől a jobb alsóig; a lagúna a jobb oldalt tölti ki az aljáig.
+      waterTop: 39, waterBottom: 94,
+      waterClip: 'polygon(10% 45%, 45% 41%, 100% 39%, 100% 100%, 66% 100%, 57% 91%, 48% 82%, 40% 74%, 32% 66%, 24% 57%, 16% 50%)'
+    },
+    {
+      src: lagoonImg,
+      titleHu: 'Napsütéses Trópusi Lagúna', titleEn: 'Sunny Tropical Lagoon',
+      sunX: 51, sunY: 37, sunStrength: 0.25,
+      // Mérve: horizont y30%, a bungalós sziget alja y36%, jobbra a fehér homokpad
+      // átlósan y58%-ig. Alatta végig lagúna, a jobb alsó sarokban is.
+      waterTop: 32, waterBottom: 96,
+      waterClip: 'polygon(0% 32%, 8% 32%, 12% 35%, 38% 35%, 41% 37%, 79% 37%, 83% 43%, 89% 48%, 94% 53%, 100% 58%, 100% 100%, 0% 100%)'
+    }
   ];
-  const { sunX, sunY } = images[currentImageIndex];
+  const { sunX, sunY, sunStrength, waterTop, waterBottom, waterClip } = images[currentImageIndex];
 
   // Atmosphere controls
   const [windSpeed, setWindSpeed] = useState<number>(45); // 5 - 100 km/h
@@ -150,8 +217,12 @@ export default function App() {
   const [sunGlow, setSunGlow] = useState<number>(85);
 
   // Depth-of-field horizon blur calculated dynamically based on wind speed
-  const horizonBlurPx = Math.max(0.2, (windSpeed / 100) * 9.5);
-  const horizonHazeOpacity = (windSpeed / 100) * 0.45;
+  const horizonBlurPx = Math.max(0.2, (windSpeed / 100) * 6.0);
+  const horizonHazeOpacity = (windSpeed / 100) * 0.22;
+
+  // Csillámösvény-erősség: napszak × borult ég. A darabszámot és az opacitást is ez vezérli.
+  const ambientFactor =
+    AMBIENT_BY_TIME_OF_DAY[timeOfDay] * (soundType === 'rain' ? RAIN_AMBIENT_FACTOR : 1);
 
   // Az eső dőlése a széllel nő: ~4° szélcsendben, ~22° viharban.
   // A vízszintes elsodródás ugyanebből a szögből jön, hogy a csepp a saját
@@ -398,8 +469,8 @@ export default function App() {
       position: absolute; top: 32%; left: 0; right: 0; height: 28%; pointer-events: none; z-index: 5;
       backdrop-filter: blur(var(--horizon-blur, ${horizonBlurPx.toFixed(1)}px));
       -webkit-backdrop-filter: blur(var(--horizon-blur, ${horizonBlurPx.toFixed(1)}px));
-      mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
-      -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+      mask-image: ${HORIZON_MASK};
+      -webkit-mask-image: ${HORIZON_MASK};
     }
     .cloud { position: absolute; left: 0; width: 100%; pointer-events: none; }
     .cloud-blob {
@@ -407,20 +478,32 @@ export default function App() {
       background: linear-gradient(90deg, transparent, rgba(254, 243, 199, 0.45), transparent);
       filter: blur(30px);
     }
+    /* Üveg-panel: a -webkit- változat kézzel kötelező, itt nincs Tailwind */
     .controls {
       position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 16px;
+      background: rgba(2, 6, 23, 0.45);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.10); border-radius: 16px;
       padding: 16px 24px; display: flex; flex-direction: column; gap: 12px;
-      width: 92%; max-width: 520px; z-index: 10; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);
+      width: 92%; max-width: 520px; z-index: 10; box-shadow: 0 18px 50px -18px rgba(0, 0, 0, 0.75);
+    }
+    @media (max-width: 600px) {
+      .controls {
+        padding: 12px 16px;
+        backdrop-filter: blur(11px);
+        -webkit-backdrop-filter: blur(11px);
+      }
     }
     .row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; }
     input[type=range] { width: 100%; accent-color: #fbbf24; cursor: pointer; }
+    /* Panelen belül nincs backdrop-filter — beágyazva hatástalan, csak áttetsző háttér + keret */
     select, button {
-      background: linear-gradient(90deg, #f59e0b, #d97706); color: #0f172a; border: none;
+      background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.45);
+      color: #fde68a;
       padding: 10px 14px; border-radius: 12px; font-weight: 700; cursor: pointer; font-size: 13px;
     }
-    select { background: #1e293b; color: #f8fafc; border: 1px solid #475569; }
+    select { background: rgba(15, 23, 42, 0.55); color: #f8fafc; border: 1px solid rgba(255, 255, 255, 0.15); }
     .ripple {
       position: absolute; border-radius: 50%; border: 2px solid rgba(253, 230, 138, 0.8);
       background: rgba(253, 230, 138, 0.15); pointer-events: none; animation: ping 1.2s cubic-bezier(0,0,0.2,1) forwards;
@@ -523,7 +606,7 @@ ${oceanAudioSource}
       const val = parseFloat(e.target.value);
       document.getElementById('windVal').textContent = val + ' km/h';
       document.querySelectorAll('.cloud').forEach(c => c.style.setProperty('--cloud-period', (1200 / val) + 's'));
-      const blurPx = Math.max(0.2, (val / 100) * 9.5);
+      const blurPx = Math.max(0.2, (val / 100) * 6.0);
       document.getElementById('horizonBlurLayer').style.setProperty('--horizon-blur', blurPx + 'px');
       if (ocean) ocean.setWindSpeed(val);
     });
@@ -569,8 +652,11 @@ ${oceanAudioSource}
     <div className="relative w-screen h-screen overflow-hidden bg-slate-950 text-slate-100 select-none">
       
       {/* BACKGROUND SEASCAPE IMAGE & ANIMATED WAVE LAYERS */}
-      <div 
-        className="absolute inset-0 cursor-crosshair overflow-hidden"
+      {/* overflow-clip, nem -hidden: a sodródó felhők túllógnak a boxon, így a
+          jelenet görgethetővé válna, és egy gombfókusz elcsúsztatná az egész
+          overlay-réteget (blur-sávok, nap, csillanások) a fotóhoz képest. */}
+      <div
+        className="absolute inset-0 cursor-crosshair overflow-clip"
         onClick={handleSceneClick}
       >
         {/* Base Seascape Image with Ocean Swell Animation */}
@@ -582,36 +668,59 @@ ${oceanAudioSource}
         />
 
         {/* DYNAMIC HORIZON DEPTH-OF-FIELD BLUR & ATMOSPHERIC SEA SPRAY MIST LAYER */}
-        <div 
-          className="absolute top-[32%] inset-x-0 h-[28%] pointer-events-none transition-all duration-300 ease-out z-[5]"
+        {/* Három egymást átfedő réteg fokozódó blurral: egyetlen sáv látható
+            vágásvonalat adott, mert a maszk 20%-nál már teljes erőn volt. */}
+        <div
+          className="absolute top-[24%] inset-x-0 h-[16%] pointer-events-none transition-all duration-300 ease-out z-[5]"
           style={{
-            backdropFilter: `blur(${horizonBlurPx.toFixed(1)}px)`,
-            WebkitBackdropFilter: `blur(${horizonBlurPx.toFixed(1)}px)`,
-            maskImage: 'linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)',
-            WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)'
+            backdropFilter: `blur(${(horizonBlurPx * 0.25).toFixed(2)}px)`,
+            WebkitBackdropFilter: `blur(${(horizonBlurPx * 0.25).toFixed(2)}px)`,
+            maskImage: HORIZON_MASK,
+            WebkitMaskImage: HORIZON_MASK
+          }}
+        />
+        <div
+          className="absolute top-[32%] inset-x-0 h-[20%] pointer-events-none transition-all duration-300 ease-out z-[5]"
+          style={{
+            backdropFilter: `blur(${(horizonBlurPx * 0.55).toFixed(2)}px)`,
+            WebkitBackdropFilter: `blur(${(horizonBlurPx * 0.55).toFixed(2)}px)`,
+            maskImage: HORIZON_MASK,
+            WebkitMaskImage: HORIZON_MASK
           }}
         >
           {/* Sea Spray / Heat Mist Band overlay that intensifies with high wind speed */}
-          <div 
+          <div
             className="w-full h-full bg-gradient-to-b from-amber-100/10 via-amber-200/20 to-sky-100/10 transition-opacity duration-300"
             style={{ opacity: horizonHazeOpacity }}
           />
         </div>
+        <div
+          className="absolute top-[42%] inset-x-0 h-[22%] pointer-events-none transition-all duration-300 ease-out z-[5]"
+          style={{
+            backdropFilter: `blur(${horizonBlurPx.toFixed(2)}px)`,
+            WebkitBackdropFilter: `blur(${horizonBlurPx.toFixed(2)}px)`,
+            maskImage: HORIZON_MASK,
+            WebkitMaskImage: HORIZON_MASK
+          }}
+        />
 
         {/* Dynamic Sunset / Twilight Color Filter */}
         <div className={`absolute inset-0 pointer-events-none transition-all duration-1000 ${getTimeOfDayFilter()}`} />
 
         {/* SUN GLOW & REFLECTION */}
         <div
-          className="absolute w-80 h-80 rounded-full pointer-events-none animate-sun-glow transition-all duration-700"
+          className="absolute w-56 h-56 rounded-full pointer-events-none animate-sun-glow transition-all duration-700"
           style={{
             // A sun-pulsate keyframe felülírná a translate-es középre húzást,
-            // ezért a w-80/h-80 felét (10rem) közvetlenül a pozícióból vonjuk le
-            left: `calc(${sunX}% - 10rem)`,
-            top: `calc(${sunY}% - 10rem)`,
+            // ezért a w-56/h-56 felét (7rem) közvetlenül a pozícióból vonjuk le
+            left: `calc(${sunX}% - 7rem)`,
+            top: `calc(${sunY}% - 7rem)`,
+            // screen + blur: a réteg világosítja a fotót, nem lefesti
+            mixBlendMode: 'screen',
+            filter: 'blur(24px)',
             background: timeOfDay === 'night'
-              ? 'radial-gradient(circle, rgba(224,242,254,0.4) 0%, rgba(186,230,253,0.15) 45%, transparent 70%)'
-              : `radial-gradient(circle, rgba(253,186,116,${sunGlow / 100}) 0%, rgba(249,115,22,${sunGlow / 150}) 40%, transparent 75%)`
+              ? 'radial-gradient(circle, rgba(224,242,254,0.2) 0%, rgba(186,230,253,0.075) 45%, transparent 70%)'
+              : `radial-gradient(circle, rgba(255,214,150,${(sunGlow / 260) * sunStrength}) 0%, rgba(251,146,60,${(sunGlow / 420) * sunStrength}) 40%, transparent 68%)`
           }}
         />
 
@@ -673,41 +782,65 @@ ${oceanAudioSource}
         />
 
         {/* DYNAMIC WATER SURFACE SPARKLES (SCALES WITH SUN INTENSITY) */}
-        <div className="absolute top-[48%] inset-x-0 bottom-0 pointer-events-none overflow-hidden z-[6]">
-          {WATER_SPARKLES.slice(0, Math.max(8, Math.floor((sunGlow / 100) * WATER_SPARKLES.length))).map((sparkle) => {
+        {/* A konténer z-[6]-ja önmagában is stacking contextet nyit, ami elszigetelné
+            a gyerekek keverését — ezért a csoport EGÉSZE is additívan keveredik a fotóval. */}
+        <div
+          className="absolute inset-0 pointer-events-none overflow-hidden z-[6] transition-opacity duration-700"
+          style={{
+            mixBlendMode: 'plus-lighter',
+            // A vízfelület kontúrja: homokra / fűre / szigetre nem eshet csillanás
+            clipPath: waterClip,
+            WebkitClipPath: waterClip,
+            // Napszakváltáskor a darabszám ugrik — a konténer fade-je elfedi
+            opacity: ambientFactor
+          }}
+        >
+          {WATER_SPARKLES.slice(0, Math.max(4, Math.floor((sunGlow / 100) * ambientFactor * WATER_SPARKLES.length))).map((sparkle) => {
             const isCorridorSparkle = sparkle.isCorridor;
-            const sparkleScale = (sparkle.baseScale * (0.6 + (sunGlow / 100) * 0.6)).toFixed(2);
-            const maxOpacity = Math.min(1, (sunGlow / 100) * (isCorridorSparkle ? 0.95 : 0.75));
+            const isBloomSparkle = sparkle.isBloom;
+            // A kúp fent a napnál keskeny (±3%), lefelé ±14%-ig szélesedik
+            const corridorHalfWidth = 3 + sparkle.verticalT * 11;
+            const leftPercent = isCorridorSparkle
+              ? sunX + sparkle.lateral * corridorHalfWidth
+              : sparkle.scatterLeft;
+            // A csúcsméret sosem eshet a nyugalmi 0.9-es skála alá
+            const sparkleScale = Math.max(0.95, sparkle.baseScale * (0.75 + (sunGlow / 100) * 0.25)).toFixed(2);
+            // Opacitás-padló: közepes napnál is látszik. A sunStrength SZÁNDÉKOSAN nem
+            // szorozza — a lagúnán nincs látható napkorong, de csillámösvény van.
+            const maxOpacity = Math.min(
+              1,
+              (0.35 + (sunGlow / 100) * 0.6) * ambientFactor * (isCorridorSparkle ? 1 : 0.7) * (isBloomSparkle ? 0.6 : 1)
+            );
+            const pointSizePx = isBloomSparkle ? sparkle.bloomSizePx : sparkle.sizePx;
             return (
               <div
                 key={sparkle.id}
                 className="absolute animate-sparkle-point flex items-center justify-center"
                 style={{
-                  // A csóva csillanásai a nap köré, a többi a teljes vízfelületre
-                  left: `${isCorridorSparkle ? sunX + sparkle.corridorOffset : sparkle.left}%`,
-                  top: `${sparkle.top - 48}%`,
+                  left: `${leftPercent}%`,
+                  // A víz sávján belül: a horizontnál kezdődik, a vízen ér véget
+                  top: `${waterTop + sparkle.verticalT * (waterBottom - waterTop)}%`,
                   animationDelay: `${sparkle.delay}s`,
+                  mixBlendMode: 'plus-lighter',
                   '--sparkle-duration': `${sparkle.duration}s`,
                   '--sparkle-scale': sparkleScale,
                   '--sparkle-max-opacity': maxOpacity,
                 } as React.CSSProperties}
               >
-                {/* Diamond / Star Sparkle Glint */}
-                <div 
-                  className={`rounded-full ${
-                    isCorridorSparkle 
-                      ? 'bg-amber-100 shadow-[0_0_10px_rgba(254,240,138,1)]' 
-                      : 'bg-white shadow-[0_0_6px_rgba(255,255,255,0.8)]'
-                  }`}
+                {/* Fénypont: telített mag, lágy kifutás; minden nyolcadik nagyobb bloom-folt */}
+                <div
                   style={{
-                    width: isCorridorSparkle ? '4px' : '3px',
-                    height: isCorridorSparkle ? '4px' : '3px',
+                    width: sparkle.isElongated ? '1px' : `${pointSizePx.toFixed(1)}px`,
+                    height: sparkle.isElongated ? '3px' : `${pointSizePx.toFixed(1)}px`,
+                    borderRadius: sparkle.isElongated ? '40%' : '9999px',
+                    background: isCorridorSparkle
+                      ? 'radial-gradient(circle, rgba(255,252,240,1) 0%, rgba(255,230,160,0.85) 40%, transparent 75%)'
+                      : 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0.7) 40%, transparent 75%)',
+                    boxShadow: isBloomSparkle
+                      ? (isCorridorSparkle ? '0 0 14px rgba(255,230,160,0.55)' : '0 0 12px rgba(255,255,255,0.45)')
+                      : (isCorridorSparkle ? '0 0 4px rgba(254,240,138,0.7)' : '0 0 3px rgba(255,255,255,0.5)'),
                   }}
                 />
-                {/* Flare Cross Effect for brighter corridor glints */}
-                {isCorridorSparkle && (
-                  <div className="absolute w-3.5 h-[1px] bg-amber-200/90 blur-[0.2px]" />
-                )}
               </div>
             );
           })}
@@ -750,7 +883,7 @@ ${oceanAudioSource}
             <span>{lang === 'hu' ? 'Kattints az ablakra a hullámokhoz' : 'Click screen for ripples'}</span>
             <button 
               onClick={() => setIsZenMode(false)}
-              className="ml-2 px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 transition-colors"
+              className={`ml-2 px-2.5 py-1 rounded-lg ${GLASS_ACTIVE} font-bold hover:bg-amber-400/25 transition-colors`}
             >
               <Minimize className="w-3.5 h-3.5 inline mr-1" />
               {lang === 'hu' ? 'Kilépés' : 'Exit'}
@@ -781,7 +914,7 @@ ${oceanAudioSource}
             {/* Download Standalone HTML Button */}
             <button
               onClick={downloadStandaloneHtml}
-              className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md"
+              className={`px-3 py-2 rounded-xl ${GLASS_ACTIVE} hover:bg-amber-400/25 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md`}
               title={lang === 'hu' ? 'Letöltés önálló HTML fájlként (hanggal)' : 'Download as offline HTML file (with audio)'}
             >
               <Download className="w-4 h-4 text-amber-400" />
@@ -792,8 +925,8 @@ ${oceanAudioSource}
             <button
               onClick={toggleAudio}
               className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all duration-300 shadow-md ${
-                isPlayingAudio 
-                  ? 'bg-amber-500 text-slate-950 shadow-amber-500/25 hover:bg-amber-400' 
+                isPlayingAudio
+                  ? `${GLASS_ACTIVE} shadow-amber-400/15 hover:bg-amber-400/25`
                   : 'bg-slate-900/80 text-slate-200 border border-slate-700/60 hover:bg-slate-800'
               }`}
             >
@@ -828,13 +961,13 @@ ${oceanAudioSource}
         <div className="absolute bottom-6 inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:max-w-2xl w-full z-20 pointer-events-auto">
           
           {/* TABS */}
-          <div className="flex items-center justify-between p-1.5 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-white/10 shadow-2xl shadow-slate-950/80 mb-3">
+          <div className={`flex items-center justify-between p-1.5 mb-3 ${GLASS_PANEL}`}>
             <button
               onClick={() => setActiveTab('controls')}
               className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                 activeTab === 'controls' 
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                  ? GLASS_ACTIVE
+                  : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
               <Sliders className="w-3.5 h-3.5" />
@@ -845,8 +978,8 @@ ${oceanAudioSource}
               onClick={() => setActiveTab('presets')}
               className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                 activeTab === 'presets' 
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                  ? GLASS_ACTIVE
+                  : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -857,8 +990,8 @@ ${oceanAudioSource}
               onClick={() => setActiveTab('gallery')}
               className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                 activeTab === 'gallery' 
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                  ? GLASS_ACTIVE
+                  : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
               <Image className="w-3.5 h-3.5" />
@@ -869,8 +1002,8 @@ ${oceanAudioSource}
               onClick={() => setActiveTab('timer')}
               className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                 activeTab === 'timer' 
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                  ? GLASS_ACTIVE
+                  : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
               <Clock className="w-3.5 h-3.5" />
@@ -879,7 +1012,7 @@ ${oceanAudioSource}
           </div>
 
           {/* TAB CONTENT */}
-          <div className="p-4 md:p-5 rounded-2xl bg-slate-900/90 backdrop-blur-2xl border border-white/10 shadow-2xl text-slate-200">
+          <div className={`p-4 md:p-5 text-slate-200 ${GLASS_PANEL}`}>
             
             {/* TAB 1: CONTROLS & SOUND PROFILE */}
             {activeTab === 'controls' && (
@@ -934,7 +1067,7 @@ ${oceanAudioSource}
                           onClick={() => setSoundType(type.id as SoundType)}
                           className={`p-2.5 rounded-xl text-left border transition-all flex flex-col justify-between ${
                             isSelected
-                              ? 'border-amber-400 bg-amber-500/15 text-white ring-1 ring-amber-400/40 shadow-lg shadow-amber-500/10'
+                              ? `${GLASS_ACTIVE} shadow-lg shadow-amber-400/10`
                               : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-slate-700'
                           }`}
                         >
@@ -1045,7 +1178,7 @@ ${oceanAudioSource}
                         onClick={() => setTimeOfDay(mode.id as typeof timeOfDay)}
                         className={`p-2 rounded-xl text-[11px] font-medium flex flex-col items-center gap-1.5 border transition-all ${
                           timeOfDay === mode.id
-                            ? 'border-amber-400 bg-amber-500/10 text-white font-bold'
+                            ? `${GLASS_ACTIVE} font-bold`
                             : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:text-slate-200'
                         }`}
                       >
@@ -1115,8 +1248,8 @@ ${oceanAudioSource}
                       key={idx}
                       onClick={() => setCurrentImageIndex(idx)}
                       className={`relative rounded-xl overflow-hidden aspect-video border-2 transition-all ${
-                        currentImageIndex === idx 
-                          ? 'border-amber-400 ring-2 ring-amber-400/30 scale-[1.02]' 
+                        currentImageIndex === idx
+                          ? 'border-amber-400/45 ring-2 ring-amber-400/30 scale-[1.02]'
                           : 'border-slate-800 opacity-70 hover:opacity-100 hover:border-slate-600'
                       }`}
                     >
@@ -1155,7 +1288,7 @@ ${oceanAudioSource}
                           onClick={() => setTimerMinutes(m)}
                           className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                             timerMinutes === m
-                              ? 'bg-amber-500 text-slate-950 border-amber-400'
+                              ? GLASS_ACTIVE
                               : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
                           }`}
                         >
@@ -1165,7 +1298,7 @@ ${oceanAudioSource}
                     </div>
                     <button
                       onClick={startTimer}
-                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-orange-400 transition-all flex items-center justify-center gap-2"
+                      className={`w-full py-2.5 rounded-xl ${GLASS_ACTIVE} font-bold text-xs shadow-lg shadow-amber-400/15 hover:bg-amber-400/25 transition-all flex items-center justify-center gap-2`}
                     >
                       <Play className="w-4 h-4 fill-current" />
                       <span>{lang === 'hu' ? 'Meditáció Indítása' : 'Start Session'}</span>

@@ -18,9 +18,10 @@
     100% { transform: rotate(0deg); }
   }
 
+  /* Csak halk lüktetés — a narancs drop-shadow lefestette a fotót */
   @keyframes sun-pulsate {
-    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 25px rgba(251, 146, 60, 0.8)); }
-    50% { transform: scale(1.08); filter: drop-shadow(0 0 45px rgba(249, 115, 22, 0.95)); }
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
   }
 
   @keyframes water-shimmer {
@@ -29,14 +30,14 @@
     100% { background-position: 0% 50%; opacity: 0.4; }
   }
 
-  /* A vízcsillanás nem forog, csak fel- és lehalványul */
+  /* A vízcsillanás nem forog és nem nyúlik vízszintesen — csak felvillan és kihuny */
   @keyframes water-sparkle {
     0%, 100% {
-      transform: scale(0.15);
+      transform: scale(0.9);
       opacity: 0;
     }
     50% {
-      transform: scale(var(--sparkle-scale, 1.2));
+      transform: scale(var(--sparkle-scale, 1.1));
       opacity: var(--sparkle-max-opacity, 0.85);
       filter: drop-shadow(0 0 3px rgba(254, 240, 138, 0.95)) brightness(1.8);
     }
