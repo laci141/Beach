@@ -10,6 +10,11 @@ import sunsetBeachImg from './assets/images/sunset_beach_waves_1785172400376.web
 import seascapeImg from './assets/images/beautiful_seascape_1785172287050.webp';
 import lagoonImg from './assets/images/tropical_lagoon_1785172300785.webp';
 
+// A hangmotor egyetlen forrása: modulként itt, `?raw` forrásként a standalone exportban
+import { createOceanAudio, type OceanAudio, type OceanSoundType } from './audio/oceanAudio.js';
+import oceanAudioSource from './audio/oceanAudio.js?raw';
+import appStylesSource from './index.css?raw';
+
 interface Ripple {
   id: number;
   x: number;
@@ -36,7 +41,8 @@ interface Preset {
   sunGlow?: number;
 }
 
-type SoundType = 'sandy' | 'rocky' | 'ocean' | 'rain';
+// A hangprofilok halmazát a hangmotor definiálja
+type SoundType = OceanSoundType;
 
 const PRESETS: Preset[] = [
   {
@@ -110,6 +116,32 @@ const WAVE_FOAM_GLINTS = [
   { left: '76%', top: '18px', delay: '1.5s', scale: 1.1 },
 ];
 
+/**
+ * Kiemeli az index.css `@layer utilities { ... }` blokkjának tartalmát.
+ * A standalone exportnak csak az animációkra van szüksége: a `@import "tailwindcss"`
+ * és a body szabályok ott nem értelmezhetők. A layer-burkot is elhagyjuk, hogy a
+ * szabályok normál (rétegen kívüli) specificitással érvényesüljenek.
+ */
+const extractUtilitiesLayer = (css: string): string => {
+  const layerStart = css.indexOf('@layer utilities');
+  if (layerStart === -1) return '';
+
+  const blockStart = css.indexOf('{', layerStart);
+  if (blockStart === -1) return '';
+
+  let depth = 0;
+  for (let i = blockStart; i < css.length; i++) {
+    if (css[i] === '{') {
+      depth++;
+    } else if (css[i] === '}' && --depth === 0) {
+      return css.slice(blockStart + 1, i);
+    }
+  }
+  return '';
+};
+
+const OCEAN_ANIMATIONS_CSS = extractUtilitiesLayer(appStylesSource);
+
 export default function App() {
   // Language state
   const [lang, setLang] = useState<'hu' | 'en'>('hu');
@@ -137,14 +169,8 @@ export default function App() {
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
   const [audioVolume, setAudioVolume] = useState<number>(0.6);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const isAudioSetupRef = useRef<boolean>(false);
-  const masterGainRef = useRef<GainNode | null>(null);
-  const lfoRef = useRef<OscillatorNode | null>(null);
-  const waveFilterRef = useRef<BiquadFilterNode | null>(null);
-  const lfoGainRef = useRef<GainNode | null>(null);
-  const windGainRef = useRef<GainNode | null>(null);
-  const rainGainRef = useRef<GainNode | null>(null);
-  const rockyGainRef = useRef<GainNode | null>(null);
+  // A teljes hanggráf egyetlen kezelője (src/audio/oceanAudio.js)
+  const oceanAudioRef = useRef<OceanAudio | null>(null);
   // Pending suspend timer: lets the fade-out finish before we park the AudioContext
   const suspendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -167,60 +193,23 @@ export default function App() {
 
   // Real-time audio LFO frequency update when waveSpeed changes
   useEffect(() => {
-    if (lfoRef.current && audioCtxRef.current) {
-      lfoRef.current.frequency.setTargetAtTime(1 / waveSpeed, audioCtxRef.current.currentTime, 0.1);
-    }
+    oceanAudioRef.current?.setWaveSpeed(waveSpeed);
   }, [waveSpeed]);
 
   // Real-time audio wind volume update when windSpeed changes
   useEffect(() => {
-    if (windGainRef.current && audioCtxRef.current) {
-      windGainRef.current.gain.setTargetAtTime((windSpeed / 100) * 0.25, audioCtxRef.current.currentTime, 0.1);
-    }
+    oceanAudioRef.current?.setWindSpeed(windSpeed);
   }, [windSpeed]);
 
   // Real-time audio update when soundType changes
   useEffect(() => {
-    if (!audioCtxRef.current) return;
-    const ctx = audioCtxRef.current;
-    const now = ctx.currentTime;
-
-    if (waveFilterRef.current && lfoGainRef.current && rainGainRef.current && rockyGainRef.current) {
-      switch (soundType) {
-        case 'sandy':
-          waveFilterRef.current.frequency.setTargetAtTime(280, now, 0.2);
-          lfoGainRef.current.gain.setTargetAtTime(0.35, now, 0.2);
-          rainGainRef.current.gain.setTargetAtTime(0, now, 0.2);
-          rockyGainRef.current.gain.setTargetAtTime(0, now, 0.2);
-          break;
-        case 'rocky':
-          waveFilterRef.current.frequency.setTargetAtTime(580, now, 0.2);
-          lfoGainRef.current.gain.setTargetAtTime(0.50, now, 0.2);
-          rainGainRef.current.gain.setTargetAtTime(0, now, 0.2);
-          rockyGainRef.current.gain.setTargetAtTime(0.30, now, 0.2);
-          break;
-        case 'ocean':
-          waveFilterRef.current.frequency.setTargetAtTime(170, now, 0.2);
-          lfoGainRef.current.gain.setTargetAtTime(0.25, now, 0.2);
-          rainGainRef.current.gain.setTargetAtTime(0, now, 0.2);
-          rockyGainRef.current.gain.setTargetAtTime(0, now, 0.2);
-          break;
-        case 'rain':
-          waveFilterRef.current.frequency.setTargetAtTime(240, now, 0.2);
-          lfoGainRef.current.gain.setTargetAtTime(0.30, now, 0.2);
-          rainGainRef.current.gain.setTargetAtTime(0.22, now, 0.2);
-          rockyGainRef.current.gain.setTargetAtTime(0, now, 0.2);
-          break;
-      }
-    }
+    oceanAudioRef.current?.setSoundType(soundType);
   }, [soundType]);
 
   // Master Volume update
   useEffect(() => {
-    if (masterGainRef.current && audioCtxRef.current) {
-      masterGainRef.current.gain.setTargetAtTime(isPlayingAudio ? audioVolume : 0, audioCtxRef.current.currentTime, 0.1);
-    }
-  }, [audioVolume, isPlayingAudio]);
+    oceanAudioRef.current?.setVolume(audioVolume);
+  }, [audioVolume]);
 
   // Audio Toggle
   const toggleAudio = async () => {
@@ -240,25 +229,20 @@ export default function App() {
         await audioCtxRef.current.resume();
       }
 
-      if (!isAudioSetupRef.current) {
-        setupProceduralOceanAudio();
-        isAudioSetupRef.current = true;
+      if (!oceanAudioRef.current) {
+        oceanAudioRef.current = createOceanAudio(audioCtxRef.current, {
+          volume: audioVolume,
+          windSpeed,
+          waveSpeed,
+          soundType
+        });
       }
 
-      if (masterGainRef.current && audioCtxRef.current) {
-        const now = audioCtxRef.current.currentTime;
-        masterGainRef.current.gain.cancelScheduledValues(now);
-        masterGainRef.current.gain.setValueAtTime(0, now);
-        masterGainRef.current.gain.linearRampToValueAtTime(audioVolume, now + 0.25);
-      }
+      oceanAudioRef.current.start();
       setIsPlayingAudio(true);
     } else {
-      const ctx = audioCtxRef.current;
-      if (masterGainRef.current && ctx) {
-        const now = ctx.currentTime;
-        masterGainRef.current.gain.cancelScheduledValues(now);
-        masterGainRef.current.gain.setValueAtTime(masterGainRef.current.gain.value, now);
-        masterGainRef.current.gain.linearRampToValueAtTime(0, now + 0.25);
+      if (oceanAudioRef.current) {
+        oceanAudioRef.current.stop();
 
         // Let the fade finish, then park the whole graph so it stops burning CPU/battery
         suspendTimeoutRef.current = setTimeout(() => {
@@ -280,150 +264,14 @@ export default function App() {
         clearTimeout(suspendTimeoutRef.current);
         suspendTimeoutRef.current = null;
       }
+      oceanAudioRef.current?.dispose();
+      oceanAudioRef.current = null;
       if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
         void audioCtxRef.current.close();
       }
       audioCtxRef.current = null;
-      isAudioSetupRef.current = false;
     };
   }, []);
-
-  const setupProceduralOceanAudio = () => {
-    const ctx = audioCtxRef.current;
-    if (!ctx) return;
-
-    // Master Gain
-    const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(audioVolume, ctx.currentTime);
-    masterGain.connect(ctx.destination);
-    masterGainRef.current = masterGain;
-
-    const bufferSize = ctx.sampleRate * 4;
-
-    // --- 1. Ocean Wave Generator (Pink Noise + Filter Modulation) ---
-    const waveBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const waveOutput = waveBuffer.getChannelData(0);
-
-    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-    for (let i = 0; i < bufferSize; i++) {
-      const white = Math.random() * 2 - 1;
-      b0 = 0.99886 * b0 + white * 0.0555179;
-      b1 = 0.99332 * b1 + white * 0.0750759;
-      b2 = 0.96900 * b2 + white * 0.1538520;
-      b3 = 0.86650 * b3 + white * 0.3104856;
-      b4 = 0.55000 * b4 + white * 0.5329522;
-      b5 = -0.7616 * b5 - white * 0.0168980;
-      waveOutput[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
-      waveOutput[i] *= 0.11;
-      b6 = white * 0.115926;
-    }
-
-    const waveSource = ctx.createBufferSource();
-    waveSource.buffer = waveBuffer;
-    waveSource.loop = true;
-
-    const waveFilter = ctx.createBiquadFilter();
-    waveFilter.type = 'lowpass';
-    const initFreq = soundType === 'rocky' ? 580 : soundType === 'ocean' ? 170 : 280;
-    waveFilter.frequency.setValueAtTime(initFreq, ctx.currentTime);
-    waveFilterRef.current = waveFilter;
-
-    const waveGain = ctx.createGain();
-    waveGain.gain.setValueAtTime(0.2, ctx.currentTime);
-
-    waveSource.connect(waveFilter);
-    waveFilter.connect(waveGain);
-    waveGain.connect(masterGain);
-    waveSource.start();
-
-    // Rhythmic LFO for wave swells
-    const lfo = ctx.createOscillator();
-    lfo.frequency.setValueAtTime(1 / waveSpeed, ctx.currentTime);
-    lfoRef.current = lfo;
-
-    const lfoGain = ctx.createGain();
-    const initLfoGain = soundType === 'rocky' ? 0.50 : soundType === 'ocean' ? 0.25 : 0.35;
-    lfoGain.gain.setValueAtTime(initLfoGain, ctx.currentTime);
-    lfoGainRef.current = lfoGain;
-
-    lfo.connect(lfoGain);
-    lfoGain.connect(waveGain.gain);
-    lfo.start();
-
-    // --- 2. Gentle Wind Generator ---
-    const windBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const windData = windBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      windData[i] = (Math.random() * 2 - 1) * 0.08;
-    }
-
-    const windSource = ctx.createBufferSource();
-    windSource.buffer = windBuffer;
-    windSource.loop = true;
-
-    const windFilter = ctx.createBiquadFilter();
-    windFilter.type = 'bandpass';
-    windFilter.frequency.setValueAtTime(320, ctx.currentTime);
-    windFilter.Q.setValueAtTime(2.5, ctx.currentTime);
-
-    const windGain = ctx.createGain();
-    windGain.gain.setValueAtTime((windSpeed / 100) * 0.25, ctx.currentTime);
-    windGainRef.current = windGain;
-
-    windSource.connect(windFilter);
-    windFilter.connect(windGain);
-    windGain.connect(masterGain);
-    windSource.start();
-
-    // --- 3. Rain Drops Generator ---
-    const rainBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const rainData = rainBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      rainData[i] = (Math.random() * 2 - 1) * 0.06;
-    }
-
-    const rainSource = ctx.createBufferSource();
-    rainSource.buffer = rainBuffer;
-    rainSource.loop = true;
-
-    const rainFilter = ctx.createBiquadFilter();
-    rainFilter.type = 'highpass';
-    rainFilter.frequency.setValueAtTime(3200, ctx.currentTime);
-
-    const rainGain = ctx.createGain();
-    rainGain.gain.setValueAtTime(soundType === 'rain' ? 0.22 : 0, ctx.currentTime);
-    rainGainRef.current = rainGain;
-
-    rainSource.connect(rainFilter);
-    rainFilter.connect(rainGain);
-    rainGain.connect(masterGain);
-    rainSource.start();
-
-    // --- 4. Rocky Crash Spray Generator ---
-    const rockyBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const rockyData = rockyBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      rockyData[i] = (Math.random() * 2 - 1) * 0.07;
-    }
-
-    const rockySource = ctx.createBufferSource();
-    rockySource.buffer = rockyBuffer;
-    rockySource.loop = true;
-
-    const rockyFilter = ctx.createBiquadFilter();
-    rockyFilter.type = 'bandpass';
-    rockyFilter.frequency.setValueAtTime(850, ctx.currentTime);
-    rockyFilter.Q.setValueAtTime(1.8, ctx.currentTime);
-
-    const rockyGain = ctx.createGain();
-    rockyGain.gain.setValueAtTime(soundType === 'rocky' ? 0.30 : 0, ctx.currentTime);
-    rockyGainRef.current = rockyGain;
-
-    rockySource.connect(rockyFilter);
-    rockyFilter.connect(rockyGain);
-    rockyGain.connect(masterGain);
-    rockySource.start();
-  };
 
   // Click on image to create interactive water ripples
   const handleSceneClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -526,12 +374,14 @@ export default function App() {
   };
 
   // EXPORT STANDALONE HTML WITH EMBEDDED SOUND & CONTROLS
+  // A hangmotor és az animációk nincsenek újraírva: az oceanAudio.js és az
+  // index.css utilities blokkja `?raw` importtal, szó szerint kerül be ide.
   const downloadStandaloneHtml = async () => {
     try {
       const response = await fetch(images[currentImageIndex].src);
       const blob = await response.blob();
       const reader = new FileReader();
-      
+
       reader.onloadend = () => {
         const base64Image = reader.result as string;
 
@@ -548,14 +398,7 @@ export default function App() {
       font-family: system-ui, -apple-system, sans-serif; color: #f1f5f9; user-select: none;
     }
     .scene { position: relative; width: 100%; height: 100%; overflow: hidden; cursor: crosshair; }
-    .bg-img {
-      width: 100%; height: 100%; object-fit: cover; object-position: center;
-      animation: swell var(--wave-period, ${waveSpeed}s) ease-in-out infinite;
-    }
-    @keyframes swell {
-      0%, 100% { transform: scale(1.02) translateY(0px); }
-      50% { transform: scale(1.05) translateY(-10px); }
-    }
+    .bg-img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
     .horizon-blur {
       position: absolute; top: 32%; left: 0; right: 0; height: 28%; pointer-events: none; z-index: 5;
       backdrop-filter: blur(var(--horizon-blur, ${horizonBlurPx.toFixed(1)}px));
@@ -563,32 +406,13 @@ export default function App() {
       mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
       -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
     }
-    .wave-1 {
-      position: absolute; bottom: 0; left: 0; right: 0; height: 180px; pointer-events: none;
-      animation: surge1 var(--wave-period, ${waveSpeed}s) ease-in-out infinite;
-    }
-    @keyframes surge1 {
-      0%, 100% { transform: translateY(40px) scaleY(0.7); opacity: 0.2; }
-      45% { transform: translateY(-20px) scaleY(1.3); opacity: 0.85; }
-    }
-    .wave-2 {
-      position: absolute; bottom: 0; left: 0; right: 0; height: 120px; pointer-events: none;
-      animation: surge2 var(--wave-period, ${waveSpeed}s) ease-in-out infinite;
-      animation-delay: calc(var(--wave-period, ${waveSpeed}s) * -0.3);
-    }
-    @keyframes surge2 {
-      0%, 100% { transform: translateY(30px); opacity: 0.3; }
-      50% { transform: translateY(-25px); opacity: 0.9; }
-    }
-    .cloud {
-      position: absolute; left: 0; width: 600px; height: 120px; border-radius: 9999px;
+    .wave-1 { position: absolute; bottom: 0; left: 0; right: 0; height: 180px; pointer-events: none; }
+    .wave-2 { position: absolute; bottom: 0; left: 0; right: 0; height: 120px; pointer-events: none; }
+    .cloud { position: absolute; left: 0; width: 100%; pointer-events: none; }
+    .cloud-blob {
+      width: 600px; height: 120px; border-radius: 9999px;
       background: linear-gradient(90deg, transparent, rgba(254, 243, 199, 0.45), transparent);
-      filter: blur(30px); pointer-events: none;
-      animation: cloudDrift var(--cloud-period, ${1200 / windSpeed}s) linear infinite;
-    }
-    @keyframes cloudDrift {
-      0% { transform: translateX(-600px); }
-      100% { transform: translateX(100vw); }
+      filter: blur(30px);
     }
     .controls {
       position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -612,20 +436,23 @@ export default function App() {
       0% { transform: scale(0.2); opacity: 1; }
       100% { transform: scale(2.5); opacity: 0; }
     }
+
+    /* Az alábbi animációk az src/index.css @layer utilities blokkjából származnak */
+${OCEAN_ANIMATIONS_CSS}
   </style>
 </head>
 <body>
   <div class="scene" id="scene">
-    <img src="${base64Image}" class="bg-img" id="bgImg" style="--wave-period: ${waveSpeed}s">
+    <img src="${base64Image}" class="bg-img animate-ocean-swell" id="bgImg" style="--wave-period: ${waveSpeed}s">
     <div class="horizon-blur" id="horizonBlurLayer"></div>
-    <div class="cloud" style="top: 10%; --cloud-period: ${1200 / windSpeed}s"></div>
-    <div class="cloud" style="top: 22%; --cloud-period: ${1800 / windSpeed}s"></div>
-    <div class="wave-1" id="wave1" style="--wave-period: ${waveSpeed}s">
+    <div class="cloud animate-cloud-r" style="top: 10%; --cloud-period: ${1200 / windSpeed}s"><div class="cloud-blob"></div></div>
+    <div class="cloud animate-cloud-r" style="top: 22%; --cloud-period: ${1800 / windSpeed}s"><div class="cloud-blob"></div></div>
+    <div class="wave-1 animate-wave-1" id="wave1" style="--wave-period: ${waveSpeed}s">
       <svg width="100%" height="100%" viewBox="0 0 1200 120" preserveAspectRatio="none" fill="rgba(254, 243, 199, 0.35)">
         <path d="M0,0 C150,90 350,-40 500,40 C650,110 900,10 1200,50 L1200,120 L0,120 Z"></path>
       </svg>
     </div>
-    <div class="wave-2" id="wave2" style="--wave-period: ${waveSpeed}s">
+    <div class="wave-2 animate-wave-2" id="wave2" style="--wave-period: ${waveSpeed}s">
       <svg width="100%" height="100%" viewBox="0 0 1200 120" preserveAspectRatio="none" fill="rgba(255, 255, 255, 0.5)">
         <path d="M0,30 C300,10 600,80 900,20 C1050,0 1150,40 1200,30 L1200,120 L0,120 Z"></path>
       </svg>
@@ -657,102 +484,86 @@ export default function App() {
     </div>
   </div>
 
-  <script>
-    let audioCtx, masterGain, waveFilterNode, lfoGainNode, rainGainNode, isPlaying = false;
+  <script type="module">
+// ==== src/audio/oceanAudio.js — szó szerint, ugyanaz a motor, mint a React appban ====
+${oceanAudioSource}
+// ==== /src/audio/oceanAudio.js ====
 
-    document.getElementById('soundBtn').addEventListener('click', () => {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        masterGain = audioCtx.createGain();
-        masterGain.connect(audioCtx.destination);
+    const soundBtn = document.getElementById('soundBtn');
+    const soundTypeSel = document.getElementById('soundTypeSel');
+    const windSlider = document.getElementById('windSlider');
+    const waveSlider = document.getElementById('waveSlider');
+    const scene = document.getElementById('scene');
 
-        const bufferSize = audioCtx.sampleRate * 4;
-        const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-        const data = noiseBuffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * 0.1;
+    let audioCtx = null;
+    let ocean = null;
+    let isPlaying = false;
+    let suspendTimeout = null;
 
-        const src = audioCtx.createBufferSource();
-        src.buffer = noiseBuffer; src.loop = true;
+    soundBtn.addEventListener('click', async () => {
+      if (!isPlaying) {
+        if (suspendTimeout !== null) {
+          clearTimeout(suspendTimeout);
+          suspendTimeout = null;
+        }
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-        waveFilterNode = audioCtx.createBiquadFilter();
-        waveFilterNode.type = 'lowpass'; waveFilterNode.frequency.value = 280;
-
-        const waveGain = audioCtx.createGain(); waveGain.gain.value = 0.2;
-        src.connect(waveFilterNode); waveFilterNode.connect(waveGain); waveGain.connect(masterGain);
-        src.start();
-
-        const lfo = audioCtx.createOscillator();
-        lfo.frequency.value = 1 / parseFloat(document.getElementById('waveSlider').value);
-        lfoGainNode = audioCtx.createGain(); lfoGainNode.gain.value = 0.35;
-        lfo.connect(lfoGainNode); lfoGainNode.connect(waveGain.gain);
-        lfo.start();
-
-        const rainBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-        const rData = rainBuffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) rData[i] = (Math.random() * 2 - 1) * 0.05;
-        const rainSrc = audioCtx.createBufferSource(); rainSrc.buffer = rainBuffer; rainSrc.loop = true;
-        const rainFilter = audioCtx.createBiquadFilter(); rainFilter.type = 'highpass'; rainFilter.frequency.value = 3200;
-        rainGainNode = audioCtx.createGain(); rainGainNode.gain.value = 0;
-        rainSrc.connect(rainFilter); rainFilter.connect(rainGainNode); rainGainNode.connect(masterGain);
-        rainSrc.start();
+        if (!ocean) {
+          ocean = createOceanAudio(audioCtx, {
+            windSpeed: parseFloat(windSlider.value),
+            waveSpeed: parseFloat(waveSlider.value),
+            soundType: soundTypeSel.value
+          });
+        }
+        ocean.start();
+        isPlaying = true;
+      } else {
+        if (ocean) ocean.stop();
+        // Hagyjuk lefutni a fade-out-ot, utána parkoljuk le a kontextust
+        suspendTimeout = setTimeout(() => {
+          if (audioCtx && audioCtx.state === 'running') audioCtx.suspend();
+          suspendTimeout = null;
+        }, 350);
+        isPlaying = false;
       }
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      isPlaying = !isPlaying;
-      masterGain.gain.value = isPlaying ? 0.6 : 0;
-      document.getElementById('soundBtn').textContent = isPlaying ? 'Hang Némítása 🔇' : 'Hang Indítása 🔊';
-      updateSoundProfile(document.getElementById('soundTypeSel').value);
+      soundBtn.textContent = isPlaying ? 'Hang Némítása 🔇' : 'Hang Indítása 🔊';
     });
 
-    function updateSoundProfile(type) {
-      if (!audioCtx) return;
-      const now = audioCtx.currentTime;
-      if (type === 'rocky') {
-        waveFilterNode.frequency.setTargetAtTime(580, now, 0.2);
-        lfoGainNode.gain.setTargetAtTime(0.50, now, 0.2);
-        if (rainGainNode) rainGainNode.gain.setTargetAtTime(0, now, 0.2);
-      } else if (type === 'ocean') {
-        waveFilterNode.frequency.setTargetAtTime(170, now, 0.2);
-        lfoGainNode.gain.setTargetAtTime(0.25, now, 0.2);
-        if (rainGainNode) rainGainNode.gain.setTargetAtTime(0, now, 0.2);
-      } else if (type === 'rain') {
-        waveFilterNode.frequency.setTargetAtTime(240, now, 0.2);
-        lfoGainNode.gain.setTargetAtTime(0.30, now, 0.2);
-        if (rainGainNode) rainGainNode.gain.setTargetAtTime(0.22, now, 0.2);
-      } else {
-        waveFilterNode.frequency.setTargetAtTime(280, now, 0.2);
-        lfoGainNode.gain.setTargetAtTime(0.35, now, 0.2);
-        if (rainGainNode) rainGainNode.gain.setTargetAtTime(0, now, 0.2);
-      }
-    }
+    soundTypeSel.addEventListener('change', (e) => {
+      if (ocean) ocean.setSoundType(e.target.value);
+    });
 
-    document.getElementById('soundTypeSel').addEventListener('change', (e) => updateSoundProfile(e.target.value));
-
-    document.getElementById('windSlider').addEventListener('input', (e) => {
+    windSlider.addEventListener('input', (e) => {
       const val = parseFloat(e.target.value);
       document.getElementById('windVal').textContent = val + ' km/h';
       document.querySelectorAll('.cloud').forEach(c => c.style.setProperty('--cloud-period', (1200 / val) + 's'));
       const blurPx = Math.max(0.2, (val / 100) * 9.5);
       document.getElementById('horizonBlurLayer').style.setProperty('--horizon-blur', blurPx + 'px');
+      if (ocean) ocean.setWindSpeed(val);
     });
 
-    document.getElementById('waveSlider').addEventListener('input', (e) => {
-      const val = e.target.value;
+    waveSlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
       document.getElementById('waveVal').textContent = val + 's';
-      document.getElementById('bgImg').style.setProperty('--wave-period', val + 's');
-      document.getElementById('wave1').style.setProperty('--wave-period', val + 's');
-      document.getElementById('wave2').style.setProperty('--wave-period', val + 's');
+      ['bgImg', 'wave1', 'wave2'].forEach(id => {
+        document.getElementById(id).style.setProperty('--wave-period', val + 's');
+      });
+      if (ocean) ocean.setWaveSpeed(val);
     });
 
-    document.getElementById('scene').addEventListener('click', (e) => {
+    scene.addEventListener('click', (e) => {
       const ripple = document.createElement('div');
       ripple.className = 'ripple';
       ripple.style.left = (e.clientX - 40) + 'px';
       ripple.style.top = (e.clientY - 40) + 'px';
       ripple.style.width = '80px'; ripple.style.height = '80px';
-      document.getElementById('scene').appendChild(ripple);
+      scene.appendChild(ripple);
       setTimeout(() => ripple.remove(), 1200);
     });
-  </script>
+  <\/script>
 </body>
 </html>`;
 
