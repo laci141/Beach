@@ -1254,69 +1254,73 @@ ${oceanAudioSource}
 
       {/* CONTROL HUD */}
       {!isZenMode && (
-        <div className="absolute bottom-6 inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:max-w-2xl w-full z-20 pointer-events-auto">
+        <div className="absolute bottom-4 inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:max-w-lg w-full z-20 pointer-events-auto">
           
           {/* TABS */}
           <div className={`flex items-center justify-between p-1.5 mb-3 ${GLASS_PANEL}`}>
             <button
               onClick={() => setActiveTab('controls')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+              className={`flex-1 min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'controls' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              <Sliders className="w-3.5 h-3.5" />
+              <Sliders className="w-3 h-3" />
               <span>{t('tabControls')}</span>
             </button>
 
             <button
               onClick={() => setActiveTab('presets')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+              className={`flex-1 min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'presets' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5" />
+              <Sparkles className="w-3 h-3" />
               <span>{t('tabPresets')}</span>
             </button>
 
             <button
               onClick={() => setActiveTab('gallery')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+              className={`flex-1 min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'gallery' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              <Image className="w-3.5 h-3.5" />
+              <Image className="w-3 h-3" />
               <span>{t('tabGallery')}</span>
             </button>
 
             <button
               onClick={() => setActiveTab('timer')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+              className={`flex-1 min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'timer' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              <Clock className="w-3.5 h-3.5" />
+              <Clock className="w-3 h-3" />
               <span>{t('tabTimer')}</span>
             </button>
           </div>
 
           {/* TAB CONTENT */}
-          <div className={`p-4 md:p-5 text-slate-200 ${GLASS_PANEL}`}>
+          <div
+            className={`p-3 md:p-3.5 text-slate-200 max-h-[52vh] overflow-y-auto ${GLASS_PANEL}`}
+            // Diszkrét görgetősáv, hogy a magasság-korlát ne rondítson bele az üveghatásba
+            style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(251,191,36,0.35) transparent' }}
+          >
             
             {/* TAB 1: CONTROLS & SOUND PROFILE */}
             {activeTab === 'controls' && (
-              <div className="space-y-4">
+              <div className="space-y-2.5">
                 
                 {/* TENGERI HANG TÍPUS VÁLASZTÓ (SOUND TYPE SELECTION) */}
                 <div>
-                  <label className="block text-xs font-medium text-amber-300 mb-2 flex items-center gap-1.5">
+                  <label className="block text-xs font-medium text-amber-300 mb-1 flex items-center gap-1.5">
                     <Volume2 className="w-3.5 h-3.5 text-amber-400" />
                     <span>{t('soundSection')}</span>
                   </label>
@@ -1328,19 +1332,20 @@ ${oceanAudioSource}
                         <button
                           key={type.id}
                           onClick={() => setSoundType(type.id as SoundType)}
-                          className={`p-2.5 rounded-xl text-left border transition-all flex flex-col justify-between ${
+                          className={`p-2 rounded-xl text-left border transition-all flex flex-col justify-between ${
                             isSelected
                               ? `${GLASS_ACTIVE} shadow-lg shadow-amber-400/10`
                               : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-slate-700'
                           }`}
                         >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-bold text-amber-200">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs font-bold text-amber-200 leading-tight">
                               {tr(type.label)}
                             </span>
-                            <IconComp className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
+                            <IconComp className={`w-3 h-3 shrink-0 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
                           </div>
-                          <span className="text-[10px] text-slate-400">
+                          {/* Mobilon csak a profil neve fér el kényelmesen */}
+                          <span className="hidden sm:block text-[10px] text-slate-400 mt-0.5">
                             {tr(type.desc)}
                           </span>
                         </button>
@@ -1351,16 +1356,17 @@ ${oceanAudioSource}
 
                 {/* Wind Speed Slider with Dynamic Depth-of-Field Horizon Blur Indicator */}
                 <div>
-                  <div className="flex justify-between text-xs font-medium mb-1.5 text-slate-300">
+                  <div className="flex justify-between items-center gap-2 text-xs font-medium mb-1 text-slate-300">
                     <span className="flex items-center gap-1.5 text-amber-300">
-                      <Wind className="w-3.5 h-3.5 text-amber-400" />
+                      <Wind className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                       {t('windLabel')}
                     </span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-amber-300/80 font-mono">
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Diagnosztikai kijelző — keskeny kijelzőn nem fér el a felirat mellé */}
+                      <span className="hidden sm:inline text-[10px] text-amber-300/80 font-mono opacity-70">
                         {`${t('dofBlur')}: ${horizonBlurPx.toFixed(1)}px`}
                       </span>
-                      <span className="text-amber-400 font-bold">{windSpeed} km/h</span>
+                      <span className="text-amber-400 font-bold whitespace-nowrap">{windSpeed} km/h</span>
                     </div>
                   </div>
                   <input
@@ -1371,7 +1377,7 @@ ${oceanAudioSource}
                     onChange={(e) => setWindSpeed(Number(e.target.value))}
                     className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
                   />
-                  <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                  <div className="hidden sm:flex justify-between text-[10px] text-slate-400 opacity-70 mt-0.5">
                     <span>{t('windMin')}</span>
                     <span>{t('windMax')}</span>
                   </div>
@@ -1379,7 +1385,7 @@ ${oceanAudioSource}
 
                 {/* Wave Speed Slider */}
                 <div>
-                  <div className="flex justify-between text-xs font-medium mb-1.5 text-slate-300">
+                  <div className="flex justify-between text-xs font-medium mb-1 text-slate-300">
                     <span className="flex items-center gap-1.5 text-sky-300">
                       <Waves className="w-3.5 h-3.5 text-sky-400" />
                       {t('waveLabel')}
@@ -1395,7 +1401,7 @@ ${oceanAudioSource}
                     onChange={(e) => setWaveSpeed(Number(e.target.value))}
                     className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400"
                   />
-                  <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                  <div className="hidden sm:flex justify-between text-[10px] text-slate-400 opacity-70 mt-0.5">
                     <span>{t('waveMin')}</span>
                     <span>{t('waveMax')}</span>
                   </div>
@@ -1403,7 +1409,7 @@ ${oceanAudioSource}
 
                 {/* Sunshine Intensity & Water Sparkle Slider */}
                 <div>
-                  <div className="flex justify-between text-xs font-medium mb-1.5 text-slate-300">
+                  <div className="flex justify-between text-xs font-medium mb-1 text-slate-300">
                     <span className="flex items-center gap-1.5 text-amber-300">
                       <Sun className="w-3.5 h-3.5 text-amber-400" />
                       {t('sunLabel')}
@@ -1418,7 +1424,7 @@ ${oceanAudioSource}
                     onChange={(e) => setSunGlow(Number(e.target.value))}
                     className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
                   />
-                  <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                  <div className="hidden sm:flex justify-between text-[10px] text-slate-400 opacity-70 mt-0.5">
                     <span>{t('sunMin')}</span>
                     <span>{t('sunMax')}</span>
                   </div>
@@ -1426,7 +1432,7 @@ ${oceanAudioSource}
 
                 {/* Sunset Color Scheme Selector */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-2">
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
                     {t('moodLabel')}
                   </label>
                   <div className="grid grid-cols-4 gap-2">
@@ -1455,13 +1461,13 @@ ${oceanAudioSource}
                       <button
                         key={mode.id}
                         onClick={() => setTimeOfDay(mode.id as typeof timeOfDay)}
-                        className={`p-2 rounded-xl text-[11px] font-medium flex flex-col items-center gap-1.5 border transition-all ${
+                        className={`p-1.5 rounded-xl text-[10px] font-medium flex flex-col items-center gap-1 border transition-all ${
                           timeOfDay === mode.id
                             ? `${GLASS_ACTIVE} font-bold`
                             : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:text-slate-200'
                         }`}
                       >
-                        <div className={`w-full h-2 rounded-full bg-gradient-to-r ${mode.color}`} />
+                        <div className={`w-full h-1 rounded-full bg-gradient-to-r ${mode.color}`} />
                         <span>{tr(mode.label)}</span>
                       </button>
                     ))}
@@ -1489,7 +1495,7 @@ ${oceanAudioSource}
 
             {/* TAB 2: PRESETS */}
             {activeTab === 'presets' && (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <p className="text-xs text-slate-300 mb-2">
                   {t('presetsIntro')}
                 </p>
@@ -1517,7 +1523,7 @@ ${oceanAudioSource}
 
             {/* TAB 3: GALLERY */}
             {activeTab === 'gallery' && (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <p className="text-xs text-slate-300 mb-2">
                   {t('galleryIntro')}
                 </p>
@@ -1546,7 +1552,7 @@ ${oceanAudioSource}
 
             {/* TAB 4: MINDFULNESS TIMER */}
             {activeTab === 'timer' && (
-              <div className="space-y-4 text-center">
+              <div className="space-y-3 text-center">
                 <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800">
                   <span className="text-3xl font-mono font-bold text-amber-300 tracking-wider">
                     {timerSecondsLeft !== null ? formatTimerTime(timerSecondsLeft) : `${timerMinutes}:00`}
@@ -1559,7 +1565,7 @@ ${oceanAudioSource}
                 </div>
 
                 {!isTimerRunning ? (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <div className="flex justify-center gap-2">
                       {[5, 10, 15, 20].map((m) => (
                         <button
