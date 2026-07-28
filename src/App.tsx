@@ -87,34 +87,19 @@ const PRESETS: Preset[] = [
   }
 ];
 
-// Pre-calculated water sparkle positions across the horizon & wave surface
+// Pre-calculated water sparkle positions across the horizon & wave surface.
+// A fénycsóva ("corridor") csillanásai a naphoz képesti eltolással vannak tárolva,
+// mert a nap vízszintes helye képenként más — a többi a teljes szélességben szór.
 const WATER_SPARKLES = Array.from({ length: 42 }).map((_, i) => {
   const isCorridor = i % 2 === 0;
-  const left = isCorridor 
-    ? 36 + ((i * 13) % 32) + (Math.sin(i) * 3)
-    : 8 + ((i * 19) % 84);
+  const corridorOffset = -16 + ((i * 13) % 32) + (Math.sin(i) * 3); // -16% .. +16% a naptól
+  const left = 8 + ((i * 19) % 84); // csóván kívüli csillanás abszolút helye
   const top = 48 + ((i * 7) % 42); // 48% to 90% vertical sea region
   const baseScale = isCorridor ? 1.0 + (i % 4) * 0.25 : 0.6 + (i % 3) * 0.2;
   const delay = (i * 0.17) % 2.8;
   const duration = 1.6 + (i % 5) * 0.4;
-  return { id: i, left, top, baseScale, delay, duration, isCorridor };
+  return { id: i, corridorOffset, left, top, baseScale, delay, duration, isCorridor };
 });
-
-const WAVE_CREST_GLINTS = [
-  { left: '12%', top: '18px', delay: '0.2s', scale: 1.1 },
-  { left: '28%', top: '38px', delay: '0.8s', scale: 1.4 },
-  { left: '44%', top: '12px', delay: '1.4s', scale: 1.6 },
-  { left: '52%', top: '24px', delay: '0.5s', scale: 1.5 },
-  { left: '68%', top: '42px', delay: '1.1s', scale: 1.2 },
-  { left: '84%', top: '20px', delay: '1.7s', scale: 1.0 },
-];
-
-const WAVE_FOAM_GLINTS = [
-  { left: '22%', top: '15px', delay: '0.4s', scale: 1.2 },
-  { left: '48%', top: '10px', delay: '1.0s', scale: 1.7 },
-  { left: '58%', top: '22px', delay: '0.2s', scale: 1.5 },
-  { left: '76%', top: '18px', delay: '1.5s', scale: 1.1 },
-];
 
 /**
  * Kiemeli az index.css `@layer utilities { ... }` blokkjának tartalmát.
@@ -148,11 +133,14 @@ export default function App() {
 
   // Visual Scene state
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  // sunX / sunY: a nap (vagy a legfényesebb vízfelület) helye az adott képen, százalékban.
+  // Ehhez igazodik a napkorong, a fénycsóva és a vízcsillanások pozíciója.
   const images = [
-    { src: sunsetBeachImg, titleHu: 'Aranylemente & Hullámzó Tengerpart', titleEn: 'Golden Sunset & Rolling Shoreline' },
-    { src: seascapeImg, titleHu: 'Bíbor Alkonyat a Tenger felett', titleEn: 'Purple Twilight over Ocean' },
-    { src: lagoonImg, titleHu: 'Napsütéses Trópusi Lagúna', titleEn: 'Sunny Tropical Lagoon' }
+    { src: sunsetBeachImg, titleHu: 'Aranylemente & Hullámzó Tengerpart', titleEn: 'Golden Sunset & Rolling Shoreline', sunX: 34, sunY: 44 },
+    { src: seascapeImg, titleHu: 'Bíbor Alkonyat a Tenger felett', titleEn: 'Purple Twilight over Ocean', sunX: 46, sunY: 40 },
+    { src: lagoonImg, titleHu: 'Napsütéses Trópusi Lagúna', titleEn: 'Sunny Tropical Lagoon', sunX: 51, sunY: 37 }
   ];
+  const { sunX, sunY } = images[currentImageIndex];
 
   // Atmosphere controls
   const [windSpeed, setWindSpeed] = useState<number>(45); // 5 - 100 km/h
@@ -164,6 +152,13 @@ export default function App() {
   // Depth-of-field horizon blur calculated dynamically based on wind speed
   const horizonBlurPx = Math.max(0.2, (windSpeed / 100) * 9.5);
   const horizonHazeOpacity = (windSpeed / 100) * 0.45;
+
+  // Az eső dőlése a széllel nő: ~4° szélcsendben, ~22° viharban.
+  // A vízszintes elsodródás ugyanebből a szögből jön, hogy a csepp a saját
+  // tengelye mentén essen (a teljes esési út kb. 1000px-nyi függőleges út).
+  const rainTiltMagnitudeDeg = 4 + (windSpeed / 100) * 18;
+  const rainTiltDeg = -rainTiltMagnitudeDeg;
+  const rainDriftPx = Math.tan((rainTiltMagnitudeDeg * Math.PI) / 180) * 1000;
 
   // Audio state & Web Audio refs
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
@@ -406,8 +401,6 @@ export default function App() {
       mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
       -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
     }
-    .wave-1 { position: absolute; bottom: 0; left: 0; right: 0; height: 180px; pointer-events: none; }
-    .wave-2 { position: absolute; bottom: 0; left: 0; right: 0; height: 120px; pointer-events: none; }
     .cloud { position: absolute; left: 0; width: 100%; pointer-events: none; }
     .cloud-blob {
       width: 600px; height: 120px; border-radius: 9999px;
@@ -447,16 +440,6 @@ ${OCEAN_ANIMATIONS_CSS}
     <div class="horizon-blur" id="horizonBlurLayer"></div>
     <div class="cloud animate-cloud-r" style="top: 10%; --cloud-period: ${1200 / windSpeed}s"><div class="cloud-blob"></div></div>
     <div class="cloud animate-cloud-r" style="top: 22%; --cloud-period: ${1800 / windSpeed}s"><div class="cloud-blob"></div></div>
-    <div class="wave-1 animate-wave-1" id="wave1" style="--wave-period: ${waveSpeed}s">
-      <svg width="100%" height="100%" viewBox="0 0 1200 120" preserveAspectRatio="none" fill="rgba(254, 243, 199, 0.18)">
-        <path d="M0,0 C150,90 350,-40 500,40 C650,110 900,10 1200,50 L1200,120 L0,120 Z"></path>
-      </svg>
-    </div>
-    <div class="wave-2 animate-wave-2" id="wave2" style="--wave-period: ${waveSpeed}s">
-      <svg width="100%" height="100%" viewBox="0 0 1200 120" preserveAspectRatio="none" fill="rgba(255, 255, 255, 0.25)">
-        <path d="M0,30 C300,10 600,80 900,20 C1050,0 1150,40 1200,30 L1200,120 L0,120 Z"></path>
-      </svg>
-    </div>
   </div>
 
   <div class="controls">
@@ -475,7 +458,7 @@ ${OCEAN_ANIMATIONS_CSS}
       <input type="range" id="windSlider" min="5" max="100" value="${windSpeed}">
     </div>
     <div>
-      <div class="row"><span>Hullámzás Ritmusa:</span><span id="waveVal">${waveSpeed}s</span></div>
+      <div class="row"><span>Hullámhang Ritmusa:</span><span id="waveVal">${waveSpeed}s</span></div>
       <input type="range" id="waveSlider" min="1.5" max="8" step="0.1" value="${waveSpeed}">
     </div>
     <div>
@@ -548,9 +531,7 @@ ${oceanAudioSource}
     waveSlider.addEventListener('input', (e) => {
       const val = parseFloat(e.target.value);
       document.getElementById('waveVal').textContent = val + 's';
-      ['bgImg', 'wave1', 'wave2'].forEach(id => {
-        document.getElementById(id).style.setProperty('--wave-period', val + 's');
-      });
+      document.getElementById('bgImg').style.setProperty('--wave-period', val + 's');
       if (ocean) ocean.setWaveSpeed(val);
     });
 
@@ -621,10 +602,14 @@ ${oceanAudioSource}
         <div className={`absolute inset-0 pointer-events-none transition-all duration-1000 ${getTimeOfDayFilter()}`} />
 
         {/* SUN GLOW & REFLECTION */}
-        <div 
-          className="absolute top-[38%] left-[52%] -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full pointer-events-none animate-sun-glow transition-all duration-700"
+        <div
+          className="absolute w-80 h-80 rounded-full pointer-events-none animate-sun-glow transition-all duration-700"
           style={{
-            background: timeOfDay === 'night' 
+            // A sun-pulsate keyframe felülírná a translate-es középre húzást,
+            // ezért a w-80/h-80 felét (10rem) közvetlenül a pozícióból vonjuk le
+            left: `calc(${sunX}% - 10rem)`,
+            top: `calc(${sunY}% - 10rem)`,
+            background: timeOfDay === 'night'
               ? 'radial-gradient(circle, rgba(224,242,254,0.4) 0%, rgba(186,230,253,0.15) 45%, transparent 70%)'
               : `radial-gradient(circle, rgba(253,186,116,${sunGlow / 100}) 0%, rgba(249,115,22,${sunGlow / 150}) 40%, transparent 75%)`
           }}
@@ -633,17 +618,20 @@ ${oceanAudioSource}
         {/* RAIN DROPS OVERLAY WHEN 'RAIN' SOUND TYPE IS ACTIVE */}
         {soundType === 'rain' && (
           <div className="absolute inset-0 pointer-events-none overflow-hidden z-10 opacity-60">
-            {Array.from({ length: 25 }).map((_, i) => (
+            {Array.from({ length: 70 }).map((_, i) => (
               <div
                 key={i}
-                className="absolute w-[1px] bg-gradient-to-b from-transparent via-sky-200/60 to-transparent animate-pulse"
+                className="absolute w-[1px] bg-gradient-to-b from-transparent via-sky-200/45 to-transparent animate-rain-drop"
                 style={{
-                  top: `${(i * 13) % 100}%`,
-                  left: `${(i * 7) % 100}%`,
-                  height: `${20 + (i % 5) * 15}px`,
-                  transform: 'rotate(-12deg)',
-                  animationDuration: `${0.8 + (i % 3) * 0.3}s`
-                }}
+                  top: 0,
+                  // A kiindulás balra túlnyúlik, mert a csepp esés közben jobbra sodródik
+                  left: `${-25 + ((i * 7.3) % 125)}%`,
+                  height: `${14 + (i % 8) * 4}px`,
+                  '--rain-tilt': `${rainTiltDeg}deg`,
+                  '--rain-drift': `${rainDriftPx}px`,
+                  '--rain-duration': `${0.6 + ((i * 0.11) % 0.8)}s`,
+                  '--rain-delay': `${(i * 0.29) % 2}s`
+                } as React.CSSProperties}
               />
             ))}
           </div>
@@ -668,10 +656,12 @@ ${oceanAudioSource}
         {/* SEA SHIMMER & SUN LIGHT REFLECTION OVER WATER */}
         <div className="absolute top-[52%] inset-x-0 bottom-0 pointer-events-none bg-gradient-to-b from-amber-400/15 via-orange-500/10 to-transparent animate-water-shimmer mix-blend-soft-light" />
 
-        {/* SUNLIGHT REFLECTION CORRIDOR ON WATER SURFACE */}
-        <div 
-          className="absolute top-[48%] left-[36%] w-[28%] bottom-0 pointer-events-none transition-opacity duration-500"
+        {/* SUNLIGHT REFLECTION CORRIDOR ON WATER SURFACE — a nap alá igazítva */}
+        <div
+          className="absolute w-[28%] bottom-0 pointer-events-none transition-all duration-500"
           style={{
+            left: `${sunX - 14}%`,
+            top: `${sunY}%`,
             background: timeOfDay === 'night'
               ? 'linear-gradient(to bottom, rgba(186,230,253,0.2) 0%, rgba(125,211,252,0.1) 40%, transparent 100%)'
               : `linear-gradient(to bottom, rgba(254,240,138,${(sunGlow / 100) * 0.45}) 0%, rgba(251,146,60,${(sunGlow / 100) * 0.25}) 50%, transparent 100%)`,
@@ -683,7 +673,7 @@ ${oceanAudioSource}
         />
 
         {/* DYNAMIC WATER SURFACE SPARKLES (SCALES WITH SUN INTENSITY) */}
-        <div className="absolute top-[48%] inset-x-0 bottom-12 pointer-events-none overflow-hidden z-[6]">
+        <div className="absolute top-[48%] inset-x-0 bottom-0 pointer-events-none overflow-hidden z-[6]">
           {WATER_SPARKLES.slice(0, Math.max(8, Math.floor((sunGlow / 100) * WATER_SPARKLES.length))).map((sparkle) => {
             const isCorridorSparkle = sparkle.isCorridor;
             const sparkleScale = (sparkle.baseScale * (0.6 + (sunGlow / 100) * 0.6)).toFixed(2);
@@ -693,7 +683,8 @@ ${oceanAudioSource}
                 key={sparkle.id}
                 className="absolute animate-sparkle-point flex items-center justify-center"
                 style={{
-                  left: `${sparkle.left}%`,
+                  // A csóva csillanásai a nap köré, a többi a teljes vízfelületre
+                  left: `${isCorridorSparkle ? sunX + sparkle.corridorOffset : sparkle.left}%`,
                   top: `${sparkle.top - 48}%`,
                   animationDelay: `${sparkle.delay}s`,
                   '--sparkle-duration': `${sparkle.duration}s`,
@@ -715,80 +706,11 @@ ${oceanAudioSource}
                 />
                 {/* Flare Cross Effect for brighter corridor glints */}
                 {isCorridorSparkle && (
-                  <div className="absolute w-3.5 h-[1px] bg-amber-200/90 blur-[0.2px] rotate-45" />
+                  <div className="absolute w-3.5 h-[1px] bg-amber-200/90 blur-[0.2px]" />
                 )}
               </div>
             );
           })}
-        </div>
-
-        {/* ROLLING SVG SHORELINE WAVES WITH HIGH VISIBILITY & CREST LIGHT POINTS */}
-        {/* Wave 1: Rolling Crest */}
-        <div 
-          className="absolute -bottom-8 inset-x-0 h-52 pointer-events-none animate-wave-1 overflow-hidden"
-          style={{ '--wave-period': `${waveSpeed}s` } as React.CSSProperties}
-        >
-          <svg className="w-full h-full text-amber-100/18 fill-current transform scale-y-125" viewBox="0 0 1200 120" preserveAspectRatio="none">
-            <path d="M0,0 C150,90 350,-40 500,40 C650,110 900,10 1200,50 L1200,120 L0,120 Z"></path>
-          </svg>
-          {/* Dynamic Sparkle Points on Wave 1 Crest */}
-          <div className="absolute inset-0 pointer-events-none">
-            {WAVE_CREST_GLINTS.map((glint, idx) => (
-              <div
-                key={`wave1-glint-${idx}`}
-                className="absolute animate-crest-star flex items-center justify-center"
-                style={{
-                  left: glint.left,
-                  top: glint.top,
-                  animationDelay: glint.delay,
-                  '--crest-twinkle-period': `${Math.max(1.2, waveSpeed * 0.5)}s`,
-                  '--star-scale': (glint.scale * (0.6 + (sunGlow / 100) * 0.6)).toFixed(2),
-                  '--crest-sparkle-opacity': Math.min(1, (sunGlow / 100) * 0.95),
-                } as React.CSSProperties}
-              >
-                <div className="w-1.5 h-1.5 bg-amber-100 rounded-full shadow-[0_0_8px_rgba(253,224,71,0.9)]" />
-                <Sparkles className="w-3.5 h-3.5 text-amber-200 opacity-90 absolute" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Wave 2: Shore Foam Surge */}
-        <div 
-          className="absolute -bottom-8 inset-x-0 h-40 pointer-events-none animate-wave-2 overflow-hidden"
-          style={{ '--wave-period': `${waveSpeed}s` } as React.CSSProperties}
-        >
-          <svg className="w-full h-full text-white/25 fill-current" viewBox="0 0 1200 120" preserveAspectRatio="none">
-            <path d="M0,30 C300,10 600,80 900,20 C1050,0 1150,40 1200,30 L1200,120 L0,120 Z"></path>
-          </svg>
-          {/* Dynamic Sparkle Points on Wave 2 Shore Surge Crest */}
-          <div className="absolute inset-0 pointer-events-none">
-            {WAVE_FOAM_GLINTS.map((glint, idx) => (
-              <div
-                key={`wave2-glint-${idx}`}
-                className="absolute animate-crest-star flex items-center justify-center"
-                style={{
-                  left: glint.left,
-                  top: glint.top,
-                  animationDelay: glint.delay,
-                  '--crest-twinkle-period': `${Math.max(1.0, waveSpeed * 0.45)}s`,
-                  '--star-scale': (glint.scale * (0.6 + (sunGlow / 100) * 0.6)).toFixed(2),
-                  '--crest-sparkle-opacity': Math.min(1, (sunGlow / 100) * 0.9),
-                } as React.CSSProperties}
-              >
-                <div className="w-1 h-1 bg-white rounded-full shadow-[0_0_6px_rgba(255,255,255,1)]" />
-                <div className="w-2.5 h-[1px] bg-amber-100/80 absolute rotate-45" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Wave 3: White Foam Wash */}
-        <div 
-          className="absolute -bottom-8 inset-x-0 h-28 pointer-events-none animate-wave-foam"
-          style={{ '--wave-period': `${waveSpeed}s` } as React.CSSProperties}
-        >
-          <div className="w-full h-full bg-gradient-to-t from-white/35 via-white/15 to-transparent blur-sm" />
         </div>
 
         {/* SWAYING PALM LEAF SILHOUETTE RESPONDING TO WIND */}
@@ -1064,7 +986,7 @@ ${oceanAudioSource}
                   <div className="flex justify-between text-xs font-medium mb-1.5 text-slate-300">
                     <span className="flex items-center gap-1.5 text-sky-300">
                       <Waves className="w-3.5 h-3.5 text-sky-400" />
-                      {lang === 'hu' ? 'Hullámzás Ritmusa (Tengeri Hullám Sebesség)' : 'Wave Rhythm Speed (Sea Swell Period)'}
+                      {lang === 'hu' ? 'Hullámhang Ritmusa (Morajlás Periódusa)' : 'Wave Sound Rhythm (Swell Sound Period)'}
                     </span>
                     <span className="text-sky-400 font-bold">{waveSpeed}s</span>
                   </div>
@@ -1078,8 +1000,8 @@ ${oceanAudioSource}
                     className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400"
                   />
                   <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                    <span>{lang === 'hu' ? 'Gyors hullámtörés' : 'Fast crash'}</span>
-                    <span>{lang === 'hu' ? 'Lassú ringatózás' : 'Slow swell'}</span>
+                    <span>{lang === 'hu' ? 'Sűrű, gyors morajlás' : 'Fast, dense rumble'}</span>
+                    <span>{lang === 'hu' ? 'Lassú, mély lélegzés' : 'Slow, deep breathing'}</span>
                   </div>
                 </div>
 

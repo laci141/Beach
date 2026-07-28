@@ -7,34 +7,9 @@
     100% { transform: scale(1.02) translateY(0px) rotate(0deg); }
   }
 
-  @keyframes wave-surge-1 {
-    0% { transform: translateY(35px) scaleY(0.7); opacity: 0.2; }
-    40% { transform: translateY(-15px) scaleY(1.3); opacity: 0.85; }
-    70% { transform: translateY(-5px) scaleY(1.1); opacity: 0.6; }
-    100% { transform: translateY(35px) scaleY(0.7); opacity: 0.2; }
-  }
-
-  @keyframes wave-surge-2 {
-    0% { transform: translateY(25px) scaleX(0.95); opacity: 0.3; }
-    50% { transform: translateY(-25px) scaleX(1.05); opacity: 0.9; }
-    100% { transform: translateY(25px) scaleX(0.95); opacity: 0.3; }
-  }
-
-  @keyframes wave-foam-wash {
-    0% { transform: translateY(40px) scale(0.9); opacity: 0.1; }
-    45% { transform: translateY(-30px) scale(1.15); opacity: 0.95; }
-    75% { transform: translateY(-15px) scale(1.05); opacity: 0.5; }
-    100% { transform: translateY(40px) scale(0.9); opacity: 0.1; }
-  }
-
   @keyframes cloud-drift-right {
     0% { transform: translateX(-120%); }
     100% { transform: translateX(120%); }
-  }
-
-  @keyframes cloud-drift-left {
-    0% { transform: translateX(120%); }
-    100% { transform: translateX(-120%); }
   }
 
   @keyframes palm-sway {
@@ -54,27 +29,30 @@
     100% { background-position: 0% 50%; opacity: 0.4; }
   }
 
+  /* A vízcsillanás nem forog, csak fel- és lehalványul */
   @keyframes water-sparkle {
     0%, 100% {
-      transform: scale(0.15) rotate(0deg);
+      transform: scale(0.15);
       opacity: 0;
     }
     50% {
-      transform: scale(var(--sparkle-scale, 1.2)) rotate(45deg);
+      transform: scale(var(--sparkle-scale, 1.2));
       opacity: var(--sparkle-max-opacity, 0.85);
-      filter: drop-shadow(0 0 6px rgba(254, 240, 138, 0.95)) brightness(1.8);
+      filter: drop-shadow(0 0 3px rgba(254, 240, 138, 0.95)) brightness(1.8);
     }
   }
 
-  @keyframes crest-star-twinkle {
-    0%, 100% {
-      transform: scale(0.3) rotate(0deg);
-      opacity: 0.1;
+  /* Az esőcsepp a képernyő fölül a kép aljáig esik, közben oldalra sodródik */
+  @keyframes rain-fall {
+    0% {
+      transform: translate(0, -10vh) rotate(var(--rain-tilt, -12deg));
+      opacity: 0;
     }
-    50% {
-      transform: scale(var(--star-scale, 1.3)) rotate(90deg);
-      opacity: var(--crest-sparkle-opacity, 0.95);
-      filter: drop-shadow(0 0 8px rgba(253, 224, 71, 1)) brightness(2.2);
+    10% { opacity: 1; }
+    85% { opacity: 1; }
+    100% {
+      transform: translate(var(--rain-drift, 120px), 110vh) rotate(var(--rain-tilt, -12deg));
+      opacity: 0;
     }
   }
 
@@ -82,34 +60,17 @@
     animation: water-sparkle var(--sparkle-duration, 2.4s) ease-in-out infinite;
   }
 
-  .animate-crest-star {
-    animation: crest-star-twinkle var(--crest-twinkle-period, 1.8s) ease-in-out infinite;
+  .animate-rain-drop {
+    animation: rain-fall var(--rain-duration, 1s) linear infinite;
+    animation-delay: var(--rain-delay, 0s);
   }
 
   .animate-ocean-swell {
     animation: ocean-swell var(--wave-period, 4.2s) ease-in-out infinite;
   }
 
-  .animate-wave-1 {
-    animation: wave-surge-1 var(--wave-period, 4.2s) ease-in-out infinite;
-  }
-
-  .animate-wave-2 {
-    animation: wave-surge-2 var(--wave-period, 4.2s) ease-in-out infinite;
-    animation-delay: calc(var(--wave-period, 4.2s) * -0.3);
-  }
-
-  .animate-wave-foam {
-    animation: wave-foam-wash var(--wave-period, 4.2s) ease-in-out infinite;
-    animation-delay: calc(var(--wave-period, 4.2s) * -0.15);
-  }
-
   .animate-cloud-r {
     animation: cloud-drift-right var(--cloud-period, 40s) linear infinite;
-  }
-
-  .animate-cloud-l {
-    animation: cloud-drift-left var(--cloud-period, 50s) linear infinite;
   }
 
   .animate-palm-sway {
