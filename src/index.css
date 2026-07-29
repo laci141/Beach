@@ -87,6 +87,17 @@
     background-size: 200% 200%;
     animation: water-shimmer 8s ease infinite;
   }
+
+  /* Görgethető, de láthatatlan görgetősáv — a fülsor mobilon így nem
+     veszít magasságot, és nem töri meg az üveg-panel felületét. */
+  .hide-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 body {

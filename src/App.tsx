@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Volume2, VolumeX, Wind, Waves, Sun, Maximize, Minimize,
   Play, Pause, Sparkles, Image, Clock, Info, Sliders, Compass, Download,
@@ -55,10 +55,10 @@ const T = {
   },
   exit: { hu: 'Kilépés', en: 'Exit', ro: 'Ieșire', de: 'Beenden' },
   title: {
-    hu: 'Naplementés Tengerpart & Hullámok',
-    en: 'Ocean Sunset & Live Waves',
-    ro: 'Apus pe Litoral & Valuri Vii',
-    de: 'Sonnenuntergang & Lebendige Wellen'
+    hu: 'Tengermoraj',
+    en: 'Ocean Murmur',
+    ro: 'Freamătul Mării',
+    de: 'Meeresrauschen'
   },
   subtitle: {
     hu: 'Élő hullámzás, szélmozgás és mélységélesség elmosódás',
@@ -151,6 +151,12 @@ const T = {
     ro: 'Culorile Apusului & Atmosferă',
     de: 'Sonnenuntergangs-Farben & Stimmung'
   },
+  autoMood: {
+    hu: 'Napszak követése',
+    en: 'Follow time of day',
+    ro: 'Urmărește ora zilei',
+    de: 'Tageszeit folgen'
+  },
   presetsIntro: {
     hu: 'Válassz egy előre beállított tengeri hangulatot:',
     en: 'Choose a handcrafted coastal mood preset:',
@@ -200,10 +206,10 @@ const T = {
   windShort: { hu: 'Szél', en: 'Wind', ro: 'Vânt', de: 'Wind' },
   waveShort: { hu: 'Hullám', en: 'Wave', ro: 'Val', de: 'Welle' },
   exportTitle: {
-    hu: 'Naplementés Tengerpart & Mélységélesség Elmosódás',
-    en: 'Ocean Sunset & Depth-of-Field Blur',
-    ro: 'Apus pe Litoral & Estomparea Orizontului',
-    de: 'Sonnenuntergang & Tiefenunschärfe'
+    hu: 'Tengermoraj',
+    en: 'Ocean Murmur',
+    ro: 'Freamătul Mării',
+    de: 'Meeresrauschen'
   },
   soundTypeLabel: {
     hu: 'Tengeri Hang Típusa',
@@ -234,12 +240,14 @@ interface CloudLayer {
   scale: number;
 }
 
+type TimeOfDay = 'sunset' | 'golden' | 'twilight' | 'night';
+
 interface Preset {
   name: LangMap;
   windSpeed: number;
   waveSpeed: number;
   waveVolume: number;
-  timeOfDay: 'sunset' | 'golden' | 'twilight' | 'night';
+  timeOfDay: TimeOfDay;
   soundType: 'sandy' | 'rocky' | 'ocean' | 'rain';
   sunGlow?: number;
 }
@@ -342,6 +350,159 @@ const PRESETS: Preset[] = [
   }
 ];
 
+// sunX / sunY: a nap (vagy a legfényesebb vízfelület) helye az adott képen, százalékban.
+// Ehhez igazodik a napkorong, a fénycsóva és a vízcsillanások pozíciója.
+// sunStrength: mennyire látszik maga a nap az adott fotón (a lagúnán délben alig).
+// waterTop / waterBottom: a víz függőleges sávja — a csillámösvény csak ide eshet.
+// waterClip: a vízfelület kontúrja, hogy homokra / fűre / szigetre ne kerüljön csillanás.
+const IMAGES = [
+  {
+    src: sunsetBeachImg,
+    title: {
+      hu: 'Aranynaplemente & Hullámzó Tengerpart',
+      en: 'Golden Sunset & Rolling Shoreline',
+      ro: 'Apus Auriu & Țărm cu Valuri',
+      de: 'Goldener Sonnenuntergang'
+    },
+    // Chrome-ban rácson kimért napkorong-pozíció
+    sunX: 39, sunY: 39, sunStrength: 1.0,
+    // Mérve: horizont y41%, jobbra a sziklás fok y46%-ig, a partvonal átlósan
+    // fut a jobb felsőtől a bal alsóig, bal alul a füves dűne zárja.
+    waterTop: 41, waterBottom: 74,
+    waterClip: 'polygon(0% 41%, 58% 41%, 62% 46%, 90% 46%, 88% 52%, 80% 57%, 70% 62%, 60% 68%, 50% 73%, 42% 78%, 34% 74%, 28% 69%, 20% 64%, 10% 59%, 0% 53%)'
+  },
+  {
+    src: seascapeImg,
+    title: {
+      hu: 'Bíbor Alkonyat a Tenger felett',
+      en: 'Purple Twilight over Ocean',
+      ro: 'Amurg Purpuriu peste Ocean',
+      de: 'Purpurne Dämmerung über dem Meer'
+    },
+    // Kimérve: a horizonton a legfényesebb folt és a tükröződés oszlopa
+    sunX: 66, sunY: 38, sunStrength: 0.7,
+    // Mérve: horizont y37%, balra pálmás part és sziklák, a partvonal átlósan
+    // fut a bal felsőtől a jobb alsóig; a lagúna a jobb oldalt tölti ki az aljáig.
+    waterTop: 39, waterBottom: 94,
+    waterClip: 'polygon(10% 45%, 45% 41%, 100% 39%, 100% 100%, 66% 100%, 57% 91%, 48% 82%, 40% 74%, 32% 66%, 24% 57%, 16% 50%)'
+  },
+  {
+    src: lagoonImg,
+    title: {
+      hu: 'Napsütéses Trópusi Lagúna',
+      en: 'Sunny Tropical Lagoon',
+      ro: 'Lagună Tropicală Însorită',
+      de: 'Sonnige Tropische Lagune'
+    },
+    // Délidő, nincs látható napkorong — a legfényesebb sekély vízsáv közepe
+    sunX: 60, sunY: 42, sunStrength: 0.25,
+    // Mérve: horizont y30%, a bungalós sziget alja y36%, jobbra a fehér homokpad
+    // átlósan y58%-ig. Alatta végig lagúna, a jobb alsó sarokban is.
+    waterTop: 32, waterBottom: 96,
+    waterClip: 'polygon(0% 32%, 8% 32%, 12% 35%, 38% 35%, 41% 37%, 79% 37%, 83% 43%, 89% 48%, 94% 53%, 100% 58%, 100% 100%, 0% 100%)'
+  }
+];
+
+// --- Automatikus napszak ---
+
+/** Helyi óra → napszak: 06-16 aranyóra, 16-19 naplemente, 19-22 alkony, 22-06 éjszaka. */
+const moodForHour = (hour: number): TimeOfDay => {
+  if (hour < 6) return 'night';
+  if (hour < 16) return 'golden';
+  if (hour < 19) return 'sunset';
+  if (hour < 22) return 'twilight';
+  return 'night';
+};
+
+/** Milyen sűrűn nézzük újra az órát, amíg a követés be van kapcsolva. */
+const AUTO_MOOD_CHECK_MS = 10 * 60 * 1000;
+
+// --- Beállítások megőrzése két munkamenet között ---
+
+const SETTINGS_STORAGE_KEY = 'gallery-settings';
+/** Csúszkahúzás közben ne írjunk minden lépésnél a storage-ba. */
+const SETTINGS_SAVE_DEBOUNCE_MS = 300;
+
+interface StoredSettings {
+  soundType: SoundType;
+  windSpeed: number;
+  waveSpeed: number;
+  sunGlow: number;
+  audioVolume: number;
+  timeOfDay: TimeOfDay;
+  autoMood: boolean;
+  imageIndex: number;
+}
+
+/** Amit a UI is alapból mutat — ide esünk vissza minden hiányzó vagy hibás mezőnél. */
+const SETTINGS_DEFAULTS: StoredSettings = {
+  soundType: 'sandy',
+  windSpeed: 45,
+  waveSpeed: 3.8,
+  sunGlow: 85,
+  audioVolume: 0.6,
+  timeOfDay: 'golden',
+  autoMood: true,
+  imageIndex: 0
+};
+
+const TIME_OF_DAY_VALUES: readonly TimeOfDay[] = ['golden', 'sunset', 'twilight', 'night'];
+const SOUND_TYPE_VALUES: readonly SoundType[] = SOUND_PROFILE_META.map((p) => p.id);
+
+/** Számmező: csak véges szám jó, és a csúszka tartományába szorítjuk. */
+const numberOr = (value: unknown, fallback: number, min: number, max: number): number =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(max, Math.max(min, value))
+    : fallback;
+
+/** Felsorolt mező: csak a whitelistán szereplő érték jó. */
+const enumOr = <V extends string>(value: unknown, fallback: V, allowed: readonly V[]): V =>
+  typeof value === 'string' && (allowed as readonly string[]).includes(value)
+    ? (value as V)
+    : fallback;
+
+/**
+ * Mentett beállítások beolvasása és validálása. Bármilyen hiba (letiltott
+ * storage, sérült JSON, kézzel átírt érték) esetén az alapértelmezés jön vissza,
+ * mezőnként — egy rossz kulcs nem viszi el a többit.
+ */
+const loadStoredSettings = (): StoredSettings => {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return SETTINGS_DEFAULTS;
+
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return SETTINGS_DEFAULTS;
+    const s = parsed as Record<string, unknown>;
+
+    return {
+      soundType: enumOr(s.soundType, SETTINGS_DEFAULTS.soundType, SOUND_TYPE_VALUES),
+      windSpeed: numberOr(s.windSpeed, SETTINGS_DEFAULTS.windSpeed, 5, 100),
+      waveSpeed: numberOr(s.waveSpeed, SETTINGS_DEFAULTS.waveSpeed, 1.5, 8),
+      sunGlow: numberOr(s.sunGlow, SETTINGS_DEFAULTS.sunGlow, 10, 100),
+      audioVolume: numberOr(s.audioVolume, SETTINGS_DEFAULTS.audioVolume, 0, 1),
+      timeOfDay: enumOr(s.timeOfDay, SETTINGS_DEFAULTS.timeOfDay, TIME_OF_DAY_VALUES),
+      autoMood: typeof s.autoMood === 'boolean' ? s.autoMood : SETTINGS_DEFAULTS.autoMood,
+      imageIndex: Math.round(
+        numberOr(s.imageIndex, SETTINGS_DEFAULTS.imageIndex, 0, IMAGES.length - 1)
+      )
+    };
+  } catch {
+    // privát mód / letiltott storage / sérült JSON — alapértelmezéssel indulunk
+    return SETTINGS_DEFAULTS;
+  }
+};
+
+/** Egyszer, modulbetöltéskor olvassuk be: minden useState innen indul. */
+const INITIAL_SETTINGS = loadStoredSettings();
+
+// --- Elalvás-fade (az időzítő végén) ---
+
+/** A hangerő ennyi idő alatt megy nullára az időzítő lejártakor. */
+const SLEEP_FADE_MS = 10000;
+/** Léptetés sűrűsége — JS-oldali rámpa, az audio-modult nem módosítjuk. */
+const SLEEP_FADE_STEP_MS = 200;
+
 /**
  * Determinisztikus ál-véletlen 0..1 között. Azért nem Math.random(), hogy a
  * csillámminta minden betöltéskor ugyanaz legyen (és ne ugráljon újrarendereléskor).
@@ -442,67 +603,18 @@ export default function App() {
   const tr = (m: LangMap) => m[lang];
 
   // Visual Scene state
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  // sunX / sunY: a nap (vagy a legfényesebb vízfelület) helye az adott képen, százalékban.
-  // Ehhez igazodik a napkorong, a fénycsóva és a vízcsillanások pozíciója.
-  // sunStrength: mennyire látszik maga a nap az adott fotón (a lagúnán délben alig).
-  // waterTop / waterBottom: a víz függőleges sávja — a csillámösvény csak ide eshet.
-  // waterClip: a vízfelület kontúrja, hogy homokra / fűre / szigetre ne kerüljön csillanás.
-  const images = [
-    {
-      src: sunsetBeachImg,
-      title: {
-        hu: 'Aranynaplemente & Hullámzó Tengerpart',
-        en: 'Golden Sunset & Rolling Shoreline',
-        ro: 'Apus Auriu & Țărm cu Valuri',
-        de: 'Goldener Sonnenuntergang'
-      },
-      // Chrome-ban rácson kimért napkorong-pozíció
-      sunX: 39, sunY: 39, sunStrength: 1.0,
-      // Mérve: horizont y41%, jobbra a sziklás fok y46%-ig, a partvonal átlósan
-      // fut a jobb felsőtől a bal alsóig, bal alul a füves dűne zárja.
-      waterTop: 41, waterBottom: 74,
-      waterClip: 'polygon(0% 41%, 58% 41%, 62% 46%, 90% 46%, 88% 52%, 80% 57%, 70% 62%, 60% 68%, 50% 73%, 42% 78%, 34% 74%, 28% 69%, 20% 64%, 10% 59%, 0% 53%)'
-    },
-    {
-      src: seascapeImg,
-      title: {
-        hu: 'Bíbor Alkonyat a Tenger felett',
-        en: 'Purple Twilight over Ocean',
-        ro: 'Amurg Purpuriu peste Ocean',
-        de: 'Purpurne Dämmerung über dem Meer'
-      },
-      // Kimérve: a horizonton a legfényesebb folt és a tükröződés oszlopa
-      sunX: 66, sunY: 38, sunStrength: 0.7,
-      // Mérve: horizont y37%, balra pálmás part és sziklák, a partvonal átlósan
-      // fut a bal felsőtől a jobb alsóig; a lagúna a jobb oldalt tölti ki az aljáig.
-      waterTop: 39, waterBottom: 94,
-      waterClip: 'polygon(10% 45%, 45% 41%, 100% 39%, 100% 100%, 66% 100%, 57% 91%, 48% 82%, 40% 74%, 32% 66%, 24% 57%, 16% 50%)'
-    },
-    {
-      src: lagoonImg,
-      title: {
-        hu: 'Napsütéses Trópusi Lagúna',
-        en: 'Sunny Tropical Lagoon',
-        ro: 'Lagună Tropicală Însorită',
-        de: 'Sonnige Tropische Lagune'
-      },
-      // Délidő, nincs látható napkorong — a legfényesebb sekély vízsáv közepe
-      sunX: 60, sunY: 42, sunStrength: 0.25,
-      // Mérve: horizont y30%, a bungalós sziget alja y36%, jobbra a fehér homokpad
-      // átlósan y58%-ig. Alatta végig lagúna, a jobb alsó sarokban is.
-      waterTop: 32, waterBottom: 96,
-      waterClip: 'polygon(0% 32%, 8% 32%, 12% 35%, 38% 35%, 41% 37%, 79% 37%, 83% 43%, 89% 48%, 94% 53%, 100% 58%, 100% 100%, 0% 100%)'
-    }
-  ];
+  const [currentImageIndex, setCurrentImageIndex] = useState(INITIAL_SETTINGS.imageIndex);
+  const images = IMAGES;
   const { sunX, sunY, sunStrength, waterTop, waterBottom, waterClip } = images[currentImageIndex];
 
   // Atmosphere controls
-  const [windSpeed, setWindSpeed] = useState<number>(45); // 5 - 100 km/h
-  const [waveSpeed, setWaveSpeed] = useState<number>(3.8); // 1.5s - 8s per wave period
-  const [soundType, setSoundType] = useState<SoundType>('sandy');
-  const [timeOfDay, setTimeOfDay] = useState<'sunset' | 'golden' | 'twilight' | 'night'>('golden');
-  const [sunGlow, setSunGlow] = useState<number>(85);
+  const [windSpeed, setWindSpeed] = useState<number>(INITIAL_SETTINGS.windSpeed); // 5 - 100 km/h
+  const [waveSpeed, setWaveSpeed] = useState<number>(INITIAL_SETTINGS.waveSpeed); // 1.5s - 8s per wave period
+  const [soundType, setSoundType] = useState<SoundType>(INITIAL_SETTINGS.soundType);
+  const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>(INITIAL_SETTINGS.timeOfDay);
+  const [sunGlow, setSunGlow] = useState<number>(INITIAL_SETTINGS.sunGlow);
+  // Automatikus napszak: a helyi óra állítja a hangulatot, amíg kézzel nem választanak
+  const [autoMood, setAutoMood] = useState<boolean>(INITIAL_SETTINGS.autoMood);
 
   // Depth-of-field horizon blur calculated dynamically based on wind speed
   const horizonBlurPx = Math.max(0.2, (windSpeed / 100) * 6.0);
@@ -521,12 +633,19 @@ export default function App() {
 
   // Audio state & Web Audio refs
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
-  const [audioVolume, setAudioVolume] = useState<number>(0.6);
+  const [audioVolume, setAudioVolume] = useState<number>(INITIAL_SETTINGS.audioVolume);
   const audioCtxRef = useRef<AudioContext | null>(null);
   // A teljes hanggráf egyetlen kezelője (src/audio/oceanAudio.js)
   const oceanAudioRef = useRef<OceanAudio | null>(null);
   // Pending suspend timer: lets the fade-out finish before we park the AudioContext
   const suspendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Az időzítő-effekt dep-listáját nem terhelhetjük az isPlayingAudio-val (újraindulna
+  // a másodperc-számláló), ezért a lejátszási állapotot refben is vezetjük.
+  const isPlayingAudioRef = useRef<boolean>(false);
+  // Elalvás-fade léptető időzítője
+  const sleepFadeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Wake Lock sentinel — csak amíg a hang szól
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
   // Interface state
   const [isZenMode, setIsZenMode] = useState<boolean>(false);
@@ -565,50 +684,163 @@ export default function App() {
     oceanAudioRef.current?.setVolume(audioVolume);
   }, [audioVolume]);
 
-  // Audio Toggle
-  const toggleAudio = async () => {
-    if (!isPlayingAudio) {
-      // A still-pending suspend would silently park the context right after we start it
-      if (suspendTimeoutRef.current !== null) {
-        clearTimeout(suspendTimeoutRef.current);
+  // --- Wake Lock: amíg szól a hang, ne aludjon el a kijelző ---
+  // Feature-detect + néma hibakezelés: ahol nincs (iOS Safari régebbi verziói,
+  // nem biztonságos kontextus) vagy megtagadják (alacsony töltöttség), ott a
+  // felhasználó semmit nem vesz észre.
+
+  const releaseWakeLock = useCallback(() => {
+    const sentinel = wakeLockRef.current;
+    wakeLockRef.current = null;
+    void sentinel?.release().catch(() => {
+      // már elengedve / a lap elment — nincs teendő
+    });
+  }, []);
+
+  const requestWakeLock = useCallback(async () => {
+    if (!('wakeLock' in navigator)) return;
+    if (wakeLockRef.current) return;
+    try {
+      const sentinel = await navigator.wakeLock.request('screen');
+      wakeLockRef.current = sentinel;
+      // A böngésző lapváltáskor magától elengedi — a saját referenciánk is ürüljön,
+      // különben a visszatéréskori újrakérés azt hinné, hogy még él.
+      sentinel.addEventListener('release', () => {
+        if (wakeLockRef.current === sentinel) wakeLockRef.current = null;
+      });
+    } catch {
+      // nem támogatott vagy megtagadva — csendben továbblépünk
+    }
+  }, []);
+
+  // --- Hangvezérlés ---
+
+  const cancelSleepFade = useCallback(() => {
+    if (sleepFadeTimerRef.current !== null) {
+      clearInterval(sleepFadeTimerRef.current);
+      sleepFadeTimerRef.current = null;
+    }
+  }, []);
+
+  const startAudio = useCallback(async () => {
+    // A still-pending suspend would silently park the context right after we start it
+    if (suspendTimeoutRef.current !== null) {
+      clearTimeout(suspendTimeoutRef.current);
+      suspendTimeoutRef.current = null;
+    }
+    cancelSleepFade();
+
+    if (!audioCtxRef.current) {
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      audioCtxRef.current = new AudioContextClass();
+    }
+
+    if (audioCtxRef.current.state === 'suspended') {
+      await audioCtxRef.current.resume();
+    }
+
+    if (!oceanAudioRef.current) {
+      oceanAudioRef.current = createOceanAudio(audioCtxRef.current, {
+        volume: audioVolume,
+        windSpeed,
+        waveSpeed,
+        soundType
+      });
+    }
+
+    oceanAudioRef.current.start();
+    isPlayingAudioRef.current = true;
+    setIsPlayingAudio(true);
+    void requestWakeLock();
+  }, [audioVolume, windSpeed, waveSpeed, soundType, cancelSleepFade, requestWakeLock]);
+
+  const stopAudio = useCallback(() => {
+    cancelSleepFade();
+
+    if (oceanAudioRef.current) {
+      oceanAudioRef.current.stop();
+
+      // Let the fade finish, then park the whole graph so it stops burning CPU/battery
+      suspendTimeoutRef.current = setTimeout(() => {
+        if (audioCtxRef.current && audioCtxRef.current.state === 'running') {
+          void audioCtxRef.current.suspend();
+        }
         suspendTimeoutRef.current = null;
-      }
+      }, 350);
+    }
 
-      if (!audioCtxRef.current) {
-        const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        audioCtxRef.current = new AudioContextClass();
-      }
+    isPlayingAudioRef.current = false;
+    setIsPlayingAudio(false);
+    releaseWakeLock();
+  }, [cancelSleepFade, releaseWakeLock]);
 
-      if (audioCtxRef.current.state === 'suspended') {
-        await audioCtxRef.current.resume();
-      }
-
-      if (!oceanAudioRef.current) {
-        oceanAudioRef.current = createOceanAudio(audioCtxRef.current, {
-          volume: audioVolume,
-          windSpeed,
-          waveSpeed,
-          soundType
-        });
-      }
-
-      oceanAudioRef.current.start();
-      setIsPlayingAudio(true);
+  // Audio Toggle
+  const toggleAudio = () => {
+    if (!isPlayingAudio) {
+      void startAudio();
     } else {
-      if (oceanAudioRef.current) {
-        oceanAudioRef.current.stop();
-
-        // Let the fade finish, then park the whole graph so it stops burning CPU/battery
-        suspendTimeoutRef.current = setTimeout(() => {
-          if (audioCtxRef.current && audioCtxRef.current.state === 'running') {
-            void audioCtxRef.current.suspend();
-          }
-          suspendTimeoutRef.current = null;
-        }, 350);
-      }
-      setIsPlayingAudio(false);
+      stopAudio();
     }
   };
+
+  /**
+   * Elalvás-fade: a hangerőt SLEEP_FADE_MS alatt, SLEEP_FADE_STEP_MS-onként
+   * lineárisan nullára viszi a hangmotor publikus setVolume-jával (az audio-modul
+   * érintetlen), majd rendes stop következik. A tárolt hangerőt a végén
+   * visszaállítjuk, hogy a következő indítás ne legyen néma.
+   *
+   * Konzolból is hívható ellenőrzéshez: `window.startSleepFade()`
+   * @returns false, ha nincs mit halkítani (nem szól a hang)
+   */
+  const startSleepFade = useCallback((): boolean => {
+    const ocean = oceanAudioRef.current;
+    if (!ocean || !isPlayingAudioRef.current) return false;
+
+    cancelSleepFade();
+
+    const startVolume = audioVolume;
+    const totalSteps = Math.round(SLEEP_FADE_MS / SLEEP_FADE_STEP_MS);
+    let step = 0;
+
+    sleepFadeTimerRef.current = setInterval(() => {
+      step += 1;
+      ocean.setVolume(startVolume * Math.max(0, 1 - step / totalSteps));
+
+      if (step >= totalSteps) {
+        cancelSleepFade();
+        stopAudio();
+        ocean.setVolume(startVolume);
+      }
+    }, SLEEP_FADE_STEP_MS);
+
+    return true;
+  }, [audioVolume, cancelSleepFade, stopAudio]);
+
+  // Az időzítő-effekt a legfrissebb változatot refen keresztül éri el, hogy a
+  // hangerő változása ne indítsa újra a másodperc-számlálót.
+  const startSleepFadeRef = useRef(startSleepFade);
+  useEffect(() => {
+    startSleepFadeRef.current = startSleepFade;
+  }, [startSleepFade]);
+
+  // Konzolos ellenőrzéshez név szerint elérhető
+  useEffect(() => {
+    const w = window as Window & { startSleepFade?: () => boolean };
+    w.startSleepFade = startSleepFade;
+    return () => {
+      delete w.startSleepFade;
+    };
+  }, [startSleepFade]);
+
+  // Visszatéréskor újra kell kérni a wake lockot: a böngésző lapváltáskor elengedi
+  useEffect(() => {
+    if (!isPlayingAudio) return;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void requestWakeLock();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isPlayingAudio, requestWakeLock]);
 
   // Tear everything down on unmount: without this the oscillators and noise
   // sources keep running for the lifetime of the page.
@@ -618,6 +850,17 @@ export default function App() {
         clearTimeout(suspendTimeoutRef.current);
         suspendTimeoutRef.current = null;
       }
+      if (sleepFadeTimerRef.current !== null) {
+        clearInterval(sleepFadeTimerRef.current);
+        sleepFadeTimerRef.current = null;
+      }
+      // A wake lockot a böngésző a lap eldobásakor is elengedi, de ne bízzuk rá
+      const sentinel = wakeLockRef.current;
+      wakeLockRef.current = null;
+      void sentinel?.release().catch(() => {
+        // már elengedve — nincs teendő
+      });
+      isPlayingAudioRef.current = false;
       oceanAudioRef.current?.dispose();
       oceanAudioRef.current = null;
       if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
@@ -626,6 +869,38 @@ export default function App() {
       audioCtxRef.current = null;
     };
   }, []);
+
+  // Automatikus napszak: betöltéskor és 10 percenként a helyi órához igazít.
+  // Kikapcsolva (kézi választás után) semmit nem csinál.
+  useEffect(() => {
+    if (!autoMood) return;
+    const applyMoodForNow = () => setTimeOfDay(moodForHour(new Date().getHours()));
+    applyMoodForNow();
+    const interval = setInterval(applyMoodForNow, AUTO_MOOD_CHECK_MS);
+    return () => clearInterval(interval);
+  }, [autoMood]);
+
+  // Beállítások mentése — debounce-olva, hogy a csúszkahúzás ne írjon minden lépésnél
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const settings: StoredSettings = {
+          soundType,
+          windSpeed,
+          waveSpeed,
+          sunGlow,
+          audioVolume,
+          timeOfDay,
+          autoMood,
+          imageIndex: currentImageIndex
+        };
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+      } catch {
+        // privát mód / betelt kvóta — a beállítások csak a munkamenetre maradnak meg
+      }
+    }, SETTINGS_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [soundType, windSpeed, waveSpeed, sunGlow, audioVolume, timeOfDay, autoMood, currentImageIndex]);
 
   // Click on image to create interactive water ripples
   const handleSceneClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -669,7 +944,11 @@ export default function App() {
       }, 1000);
     } else if (timerSecondsLeft === 0 && isTimerRunning) {
       setIsTimerRunning(false);
-      if (audioCtxRef.current) {
+
+      if (isPlayingAudioRef.current) {
+        // Elalvás-mód: a moraj 10 mp alatt kihuny, csengő nem szólal meg
+        startSleepFadeRef.current();
+      } else if (audioCtxRef.current) {
         const chime = audioCtxRef.current.createOscillator();
         const chimeGain = audioCtxRef.current.createGain();
         chime.type = 'sine';
@@ -701,6 +980,9 @@ export default function App() {
     setWindSpeed(preset.windSpeed);
     setWaveSpeed(preset.waveSpeed);
     setAudioVolume(preset.waveVolume);
+    // A preset is kézi szándék: a kért hangulatot a napszak-követés nem írhatja
+    // felül a következő ellenőrzéskor.
+    setAutoMood(false);
     setTimeOfDay(preset.timeOfDay);
     setSoundType(preset.soundType);
     if (preset.sunGlow !== undefined) setSunGlow(preset.sunGlow);
@@ -1180,87 +1462,92 @@ ${oceanAudioSource}
 
       {/* TOP HEADER */}
       {!isZenMode && (
-        <header className="absolute top-0 inset-x-0 p-4 md:p-6 flex items-center justify-between z-20 pointer-events-auto bg-gradient-to-b from-slate-950/85 via-slate-950/40 to-transparent backdrop-blur-[2px]">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-amber-500/20 to-orange-500/30 border border-amber-500/30 shadow-lg shadow-amber-500/10">
-              <Sun className="w-6 h-6 text-amber-400" />
-            </div>
-            <div>
-              <h1 className="text-lg md:text-xl font-bold tracking-tight bg-gradient-to-r from-amber-200 via-orange-100 to-amber-300 bg-clip-text text-transparent">
+        <header className="absolute top-0 inset-x-0 px-1.5 py-3 md:px-6 md:py-6 z-20 pointer-events-auto bg-gradient-to-b from-slate-950/85 via-slate-950/40 to-transparent backdrop-blur-[2px]">
+          {/* Mobilon két sor (cím / vezérlők), md-től visszaáll az egysoros fejléc */}
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-4">
+            {/* 1. sor: a rövid cím egy sorban. Az alcím csak md-től fér el alá. */}
+            <div className="min-w-0">
+              <h1 className="truncate text-lg md:text-xl font-bold tracking-tight bg-gradient-to-r from-amber-200 via-orange-100 to-amber-300 bg-clip-text text-transparent">
                 {t('title')}
               </h1>
-              <p className="text-xs text-slate-300/80 flex items-center gap-1.5 font-medium">
+              <p className="hidden md:flex text-xs text-slate-300/80 items-center gap-1.5 font-medium">
                 <Compass className="w-3.5 h-3.5 text-amber-400" />
                 {t('subtitle')}
               </p>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2 md:gap-3">
-            {/* Download Standalone HTML Button */}
-            <button
-              onClick={downloadStandaloneHtml}
-              className={`px-3 py-2 rounded-xl ${GLASS_ACTIVE} hover:bg-amber-400/25 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md`}
-              title={t('downloadTitle')}
-            >
-              <Download className="w-4 h-4 text-amber-400" />
-              <span className="hidden sm:inline">{t('downloadBtn')}</span>
-            </button>
-
-            {/* Audio Toggle */}
-            <button
-              onClick={toggleAudio}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all duration-300 shadow-md ${
-                isPlayingAudio
-                  ? `${GLASS_ACTIVE} shadow-amber-400/15 hover:bg-amber-400/25`
-                  : 'bg-slate-900/80 text-slate-200 border border-slate-700/60 hover:bg-slate-800'
-              }`}
-            >
-              {isPlayingAudio ? <Volume2 className="w-4 h-4 animate-pulse" /> : <VolumeX className="w-4 h-4" />}
-              <span className="hidden sm:inline">
-                {isPlayingAudio ? t('soundOn') : t('playSound')}
-              </span>
-            </button>
-
-            {/* Language Switcher — négy nyelv, az aktívon az egységes üveg-stílus */}
-            <div className="flex items-center gap-1">
-              {LANGS.map((code) => (
+            {/* 2. sor mobilon: balra hang + teljes képernyő, jobbra a négy nyelvgomb.
+                md-től a `contents` feloldja a bal oldali csoportot, így az elemek
+                az outer flexbe kerülnek, és az order-* visszaadja az eredeti
+                (letöltés → hang → nyelvek → zen) sorrendet. */}
+            <div className="flex items-center justify-between gap-2 md:justify-end md:gap-3">
+              <div className="flex items-center gap-2 md:contents">
+                {/* Download Standalone HTML Button — mobilon nincs rá hely */}
                 <button
-                  key={code}
-                  onClick={() => setLang(code)}
-                  aria-pressed={lang === code}
-                  className={`px-2 py-1.5 rounded-lg text-[11px] font-bold uppercase transition-all ${
-                    lang === code
-                      ? GLASS_ACTIVE
-                      : 'border border-slate-700/60 bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800'
+                  onClick={downloadStandaloneHtml}
+                  className={`hidden md:inline-flex md:order-1 px-3 py-2 rounded-xl ${GLASS_ACTIVE} hover:bg-amber-400/25 text-xs font-semibold items-center gap-1.5 transition-all shadow-md`}
+                  title={t('downloadTitle')}
+                >
+                  <Download className="w-4 h-4 text-amber-400" />
+                  <span className="hidden sm:inline">{t('downloadBtn')}</span>
+                </button>
+
+                {/* Audio Toggle */}
+                <button
+                  onClick={toggleAudio}
+                  className={`md:order-2 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all duration-300 shadow-md ${
+                    isPlayingAudio
+                      ? `${GLASS_ACTIVE} shadow-amber-400/15 hover:bg-amber-400/25`
+                      : 'bg-slate-900/80 text-slate-200 border border-slate-700/60 hover:bg-slate-800'
                   }`}
                 >
-                  {code}
+                  {isPlayingAudio ? <Volume2 className="w-4 h-4 animate-pulse" /> : <VolumeX className="w-4 h-4" />}
+                  <span className="hidden sm:inline">
+                    {isPlayingAudio ? t('soundOn') : t('playSound')}
+                  </span>
                 </button>
-              ))}
-            </div>
 
-            {/* Zen Mode */}
-            <button
-              onClick={() => setIsZenMode(true)}
-              className="p-2 rounded-xl bg-slate-900/80 border border-slate-700/60 text-slate-300 hover:text-amber-300 hover:bg-slate-800 transition-all"
-              title={t('zenView')}
-            >
-              <Maximize className="w-4 h-4" />
-            </button>
+                {/* Zen Mode */}
+                <button
+                  onClick={() => setIsZenMode(true)}
+                  className="md:order-4 p-2 rounded-xl bg-slate-900/80 border border-slate-700/60 text-slate-300 hover:text-amber-300 hover:bg-slate-800 transition-all"
+                  title={t('zenView')}
+                >
+                  <Maximize className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Language Switcher — négy nyelv, az aktívon az egységes üveg-stílus */}
+              <div className="md:order-3 flex items-center gap-1">
+                {LANGS.map((code) => (
+                  <button
+                    key={code}
+                    onClick={() => setLang(code)}
+                    aria-pressed={lang === code}
+                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold uppercase transition-all ${
+                      lang === code
+                        ? GLASS_ACTIVE
+                        : 'border border-slate-700/60 bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    {code}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </header>
       )}
 
       {/* CONTROL HUD */}
       {!isZenMode && (
-        <div className="absolute bottom-4 inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:max-w-lg w-full z-20 pointer-events-auto">
-          
-          {/* TABS */}
-          <div className={`flex items-center justify-between p-1.5 mb-3 ${GLASS_PANEL}`}>
+        <div className="absolute bottom-2 left-2 right-2 md:bottom-4 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-full md:max-w-lg z-20 pointer-events-auto">
+
+          {/* TABS — mobilon vízszintesen görgethető, hogy a Timer fül se vágódjon le */}
+          <div className={`flex flex-nowrap items-center gap-1 whitespace-nowrap overflow-x-auto hide-scrollbar p-1.5 mb-3 ${GLASS_PANEL}`}>
             <button
               onClick={() => setActiveTab('controls')}
-              className={`flex-1 min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`shrink-0 md:flex-1 md:min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'controls' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -1272,7 +1559,7 @@ ${oceanAudioSource}
 
             <button
               onClick={() => setActiveTab('presets')}
-              className={`flex-1 min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`shrink-0 md:flex-1 md:min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'presets' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -1284,7 +1571,7 @@ ${oceanAudioSource}
 
             <button
               onClick={() => setActiveTab('gallery')}
-              className={`flex-1 min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`shrink-0 md:flex-1 md:min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'gallery' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -1296,7 +1583,7 @@ ${oceanAudioSource}
 
             <button
               onClick={() => setActiveTab('timer')}
-              className={`flex-1 min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`shrink-0 md:flex-1 md:min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'timer' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -1309,7 +1596,7 @@ ${oceanAudioSource}
 
           {/* TAB CONTENT */}
           <div
-            className={`p-3 md:p-3.5 text-slate-200 max-h-[52vh] overflow-y-auto ${GLASS_PANEL}`}
+            className={`p-3 md:p-3.5 text-slate-200 max-h-[52vh] overflow-y-auto overflow-x-hidden ${GLASS_PANEL}`}
             // Diszkrét görgetősáv, hogy a magasság-korlát ne rondítson bele az üveghatásba
             style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(251,191,36,0.35) transparent' }}
           >
@@ -1356,8 +1643,8 @@ ${oceanAudioSource}
 
                 {/* Wind Speed Slider with Dynamic Depth-of-Field Horizon Blur Indicator */}
                 <div>
-                  <div className="flex justify-between items-center gap-2 text-xs font-medium mb-1 text-slate-300">
-                    <span className="flex items-center gap-1.5 text-amber-300">
+                  <div className="flex justify-between items-center gap-2 min-w-0 text-xs font-medium mb-1 text-slate-300">
+                    <span className="flex items-center gap-1.5 min-w-0 text-amber-300">
                       <Wind className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                       {t('windLabel')}
                     </span>
@@ -1385,12 +1672,12 @@ ${oceanAudioSource}
 
                 {/* Wave Speed Slider */}
                 <div>
-                  <div className="flex justify-between text-xs font-medium mb-1 text-slate-300">
-                    <span className="flex items-center gap-1.5 text-sky-300">
-                      <Waves className="w-3.5 h-3.5 text-sky-400" />
+                  <div className="flex justify-between items-center gap-2 min-w-0 text-xs font-medium mb-1 text-slate-300">
+                    <span className="flex items-center gap-1.5 min-w-0 text-sky-300">
+                      <Waves className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                       {t('waveLabel')}
                     </span>
-                    <span className="text-sky-400 font-bold">{waveSpeed}s</span>
+                    <span className="text-sky-400 font-bold whitespace-nowrap shrink-0">{waveSpeed}s</span>
                   </div>
                   <input
                     type="range"
@@ -1409,12 +1696,12 @@ ${oceanAudioSource}
 
                 {/* Sunshine Intensity & Water Sparkle Slider */}
                 <div>
-                  <div className="flex justify-between text-xs font-medium mb-1 text-slate-300">
-                    <span className="flex items-center gap-1.5 text-amber-300">
-                      <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <div className="flex justify-between items-center gap-2 min-w-0 text-xs font-medium mb-1 text-slate-300">
+                    <span className="flex items-center gap-1.5 min-w-0 text-amber-300">
+                      <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                       {t('sunLabel')}
                     </span>
-                    <span className="text-amber-400 font-bold">{sunGlow}%</span>
+                    <span className="text-amber-400 font-bold whitespace-nowrap shrink-0">{sunGlow}%</span>
                   </div>
                   <input
                     type="range"
@@ -1432,10 +1719,27 @@ ${oceanAudioSource}
 
                 {/* Sunset Color Scheme Selector */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    {t('moodLabel')}
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="flex items-center justify-between gap-2 min-w-0 mb-1">
+                    <span className="min-w-0 text-xs font-medium text-slate-300">
+                      {t('moodLabel')}
+                    </span>
+                    {/* Napszak-követés kapcsoló — kézi választás automatikusan kikapcsolja */}
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={autoMood}
+                      onClick={() => setAutoMood((prev) => !prev)}
+                      className={`shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-semibold whitespace-nowrap transition-all ${
+                        autoMood
+                          ? GLASS_ACTIVE
+                          : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Clock className="w-3 h-3 shrink-0" />
+                      <span>{t('autoMood')}</span>
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {[
                       {
                         id: 'golden',
@@ -1460,7 +1764,11 @@ ${oceanAudioSource}
                     ].map((mode) => (
                       <button
                         key={mode.id}
-                        onClick={() => setTimeOfDay(mode.id as typeof timeOfDay)}
+                        onClick={() => {
+                          // Kézi választás: a napszak-követés kikapcsol
+                          setAutoMood(false);
+                          setTimeOfDay(mode.id as TimeOfDay);
+                        }}
                         className={`p-1.5 rounded-xl text-[10px] font-medium flex flex-col items-center gap-1 border transition-all ${
                           timeOfDay === mode.id
                             ? `${GLASS_ACTIVE} font-bold`
@@ -1487,7 +1795,7 @@ ${oceanAudioSource}
                       onChange={(e) => setAudioVolume(Number(e.target.value))}
                       className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
                     />
-                    <span className="text-xs text-slate-300 w-8 text-right font-medium">{Math.round(audioVolume * 100)}%</span>
+                    <span className="text-xs text-slate-300 w-8 shrink-0 whitespace-nowrap text-right font-medium">{Math.round(audioVolume * 100)}%</span>
                   </div>
                 )}
               </div>
