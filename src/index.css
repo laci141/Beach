@@ -12,12 +12,6 @@
     100% { transform: translateX(120%); }
   }
 
-  @keyframes palm-sway {
-    0% { transform: rotate(0deg); }
-    50% { transform: rotate(var(--wind-tilt, 6deg)); }
-    100% { transform: rotate(0deg); }
-  }
-
   /* Csak halk lüktetés — a narancs drop-shadow lefestette a fotót */
   @keyframes sun-pulsate {
     0%, 100% { transform: scale(1); }
@@ -72,11 +66,6 @@
 
   .animate-cloud-r {
     animation: cloud-drift-right var(--cloud-period, 40s) linear infinite;
-  }
-
-  .animate-palm-sway {
-    animation: palm-sway var(--sway-period, 3s) ease-in-out infinite;
-    transform-origin: bottom right;
   }
 
   .animate-sun-glow {

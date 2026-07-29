@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Volume2, VolumeX, Wind, Waves, Sun, Maximize, Minimize,
-  Play, Pause, Sparkles, Image, Clock, Info, Sliders, Compass, Download,
+  Play, Pause, Sparkles, Image, Clock, Sliders, Compass, Download,
   CloudRain, Mountain, Anchor,
   type LucideIcon
 } from 'lucide-react';
@@ -47,12 +47,6 @@ const detectInitialLang = (): Lang => {
  * hogy egy szöveg összes változata egy helyen legyen lektorálható.
  */
 const T = {
-  zenHint: {
-    hu: 'Kattints az ablakra a hullámokhoz',
-    en: 'Click screen for ripples',
-    ro: 'Apasă pe ecran pentru valuri',
-    de: 'Klicke auf den Bildschirm für Wellen'
-  },
   exit: { hu: 'Kilépés', en: 'Exit', ro: 'Ieșire', de: 'Beenden' },
   title: {
     hu: 'Tengermoraj',
@@ -194,12 +188,6 @@ const T = {
     ro: 'Oprește Cronometrul',
     de: 'Timer Stoppen'
   },
-  rippleHint: {
-    hu: 'Kattints a tengerre vízhullámok keltéséhez!',
-    en: 'Click sea to generate ripples!',
-    ro: 'Apasă pe mare pentru valuri!',
-    de: 'Klicke aufs Meer für Wellenringe!'
-  },
 
   // --- Az alábbi kulcsok nem voltak a kapott listában, saját fordítás (lektorálandó) ---
   dofBlur: { hu: 'Horizont elmosódás', en: 'DOF blur', ro: 'Estompare orizont', de: 'Horizontunschärfe' },
@@ -224,13 +212,6 @@ const T = {
     de: 'Ton Stummschalten'
   }
 } satisfies Record<string, LangMap>;
-
-interface Ripple {
-  id: number;
-  x: number;
-  y: number;
-  size: number;
-}
 
 interface CloudLayer {
   id: number;
@@ -496,6 +477,45 @@ const loadStoredSettings = (): StoredSettings => {
 /** Egyszer, modulbetöltéskor olvassuk be: minden useState innen indul. */
 const INITIAL_SETTINGS = loadStoredSettings();
 
+// --- Folyamatos vízmozgás (SVG feTurbulence + feDisplacementMap) ---
+
+/** A torzító zaj nyugalmi és csúcs-frekvenciája; a SMIL e kettő között oszcillál. */
+const WATER_BASE_FREQ = '0.012 0.04';
+const WATER_PEAK_FREQ = '0.018 0.055';
+/** Oda-vissza oszcilláció az <animate values="..."> számára. */
+const WATER_FREQ_VALUES = `${WATER_BASE_FREQ}; ${WATER_PEAK_FREQ}; ${WATER_BASE_FREQ}`;
+
+/**
+ * Displacement-erősség a hullámritmusból: sűrű, gyors morajlásnál elevenebb
+ * fodrozódás (14), lassú, mély lélegzésnél lágyabb (6).
+ */
+const waterDisplacementScale = (waveSpeedSeconds: number): number => {
+  const t = (waveSpeedSeconds - 1.5) / (8 - 1.5); // 0..1 a csúszka tartományán
+  return Number((14 - t * 8).toFixed(1));
+};
+
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+/** Csökkentett mozgás esetén a vízmozgás-réteg egyáltalán nem renderelődik. */
+const usePrefersReducedMotion = (): boolean => {
+  const [reduced, setReduced] = useState(() => {
+    try {
+      return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const mq = window.matchMedia(REDUCED_MOTION_QUERY);
+    const onChange = () => setReduced(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  return reduced;
+};
+
 // --- Elalvás-fade (az időzítő végén) ---
 
 /** A hangerő ennyi idő alatt megy nullára az időzítő lejártakor. */
@@ -616,6 +636,11 @@ export default function App() {
   // Automatikus napszak: a helyi óra állítja a hangulatot, amíg kézzel nem választanak
   const [autoMood, setAutoMood] = useState<boolean>(INITIAL_SETTINGS.autoMood);
 
+  // Vízmozgás: a torzítás erőssége a hullámritmusból, a réteg csak akkor él,
+  // ha a felhasználó nem kért csökkentett mozgást.
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const waterScale = waterDisplacementScale(waveSpeed);
+
   // Depth-of-field horizon blur calculated dynamically based on wind speed
   const horizonBlurPx = Math.max(0.2, (windSpeed / 100) * 6.0);
   const horizonHazeOpacity = (windSpeed / 100) * 0.22;
@@ -650,8 +675,6 @@ export default function App() {
   // Interface state
   const [isZenMode, setIsZenMode] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'controls' | 'presets' | 'timer' | 'gallery'>('controls');
-  const [ripples, setRipples] = useState<Ripple[]>([]);
-  const rippleTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const [timerMinutes, setTimerMinutes] = useState<number>(10);
   const [timerSecondsLeft, setTimerSecondsLeft] = useState<number | null>(null);
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
@@ -902,39 +925,6 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [soundType, windSpeed, waveSpeed, sunGlow, audioVolume, timeOfDay, autoMood, currentImageIndex]);
 
-  // Click on image to create interactive water ripples
-  const handleSceneClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const newRipple: Ripple = {
-      id: Date.now() + Math.random(),
-      x,
-      y,
-      size: Math.random() * 60 + 80
-    };
-
-    setRipples((prev) => [...prev.slice(-10), newRipple]);
-
-    // Each ripple removes itself by id, so rapid clicking can no longer
-    // postpone the cleanup of the older ones.
-    const timer = setTimeout(() => {
-      setRipples((prev) => prev.filter((r) => r.id !== newRipple.id));
-      rippleTimersRef.current.delete(timer);
-    }, 1500);
-    rippleTimersRef.current.add(timer);
-  };
-
-  // Clear any ripple timers still in flight when the component goes away
-  useEffect(() => {
-    const timers = rippleTimersRef.current;
-    return () => {
-      timers.forEach((timer) => clearTimeout(timer));
-      timers.clear();
-    };
-  }, []);
-
   // Mindfulness Timer
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
@@ -1074,13 +1064,10 @@ export default function App() {
       padding: 10px 14px; border-radius: 12px; font-weight: 700; cursor: pointer; font-size: 13px;
     }
     select { background: rgba(15, 23, 42, 0.55); color: #f8fafc; border: 1px solid rgba(255, 255, 255, 0.15); }
-    .ripple {
-      position: absolute; border-radius: 50%; border: 2px solid rgba(253, 230, 138, 0.8);
-      background: rgba(253, 230, 138, 0.15); pointer-events: none; animation: ping 1.2s cubic-bezier(0,0,0.2,1) forwards;
-    }
-    @keyframes ping {
-      0% { transform: scale(0.2); opacity: 1; }
-      100% { transform: scale(2.5); opacity: 0; }
+    /* A vízmozgás-réteg: a fotó másolata, csak a vízre vágva, torzítóval */
+    .water-layer {
+      position: absolute; inset: 0; pointer-events: none;
+      filter: url(#water-motion);
     }
 
     /* Az alábbi animációk az src/index.css @layer utilities blokkjából származnak */
@@ -1088,8 +1075,21 @@ ${OCEAN_ANIMATIONS_CSS}
   </style>
 </head>
 <body>
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <defs>
+      <filter id="water-motion" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+        <feTurbulence type="turbulence" baseFrequency="${WATER_BASE_FREQ}" numOctaves="2" seed="7" result="noise">
+          <animate id="waterFreq" attributeName="baseFrequency" dur="${(waveSpeed * 2).toFixed(1)}s" values="${WATER_FREQ_VALUES}" repeatCount="indefinite"/>
+        </feTurbulence>
+        <feDisplacementMap id="waterDisp" in="SourceGraphic" in2="noise" scale="${waterScale}" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+    </defs>
+  </svg>
+
   <div class="scene" id="scene">
     <img src="${base64Image}" class="bg-img animate-ocean-swell" id="bgImg" style="--wave-period: ${waveSpeed}s">
+    <img src="${base64Image}" class="bg-img animate-ocean-swell water-layer" id="waterImg" alt="" aria-hidden="true"
+         style="--wave-period: ${waveSpeed}s; clip-path: ${waterClip}; -webkit-clip-path: ${waterClip}">
     <div class="horizon-blur" id="horizonBlurLayer"></div>
     <div class="cloud animate-cloud-r" style="top: 10%; --cloud-period: ${1200 / windSpeed}s"><div class="cloud-blob"></div></div>
     <div class="cloud animate-cloud-r" style="top: 22%; --cloud-period: ${1800 / windSpeed}s"><div class="cloud-blob"></div></div>
@@ -1126,7 +1126,12 @@ ${oceanAudioSource}
     const soundTypeSel = document.getElementById('soundTypeSel');
     const windSlider = document.getElementById('windSlider');
     const waveSlider = document.getElementById('waveSlider');
-    const scene = document.getElementById('scene');
+    const waterImg = document.getElementById('waterImg');
+    const waterFreq = document.getElementById('waterFreq');
+    const waterDisp = document.getElementById('waterDisp');
+
+    /** Ugyanaz a leképezés, mint a React appban: gyors ritmus = elevenebb fodrozódás. */
+    const waterScaleFor = (waveSeconds) => Number((14 - ((waveSeconds - 1.5) / 6.5) * 8).toFixed(1));
 
     let audioCtx = null;
     let ocean = null;
@@ -1182,18 +1187,19 @@ ${oceanAudioSource}
       const val = parseFloat(e.target.value);
       document.getElementById('waveVal').textContent = val + 's';
       document.getElementById('bgImg').style.setProperty('--wave-period', val + 's');
+      waterImg.style.setProperty('--wave-period', val + 's');
+      // A dur átírása önmagában nem indítja újra a SMIL-t — a beginElement() igen
+      waterFreq.setAttribute('dur', (val * 2).toFixed(1) + 's');
+      waterDisp.setAttribute('scale', String(waterScaleFor(val)));
+      if (typeof waterFreq.beginElement === 'function') waterFreq.beginElement();
       if (ocean) ocean.setWaveSpeed(val);
     });
 
-    scene.addEventListener('click', (e) => {
-      const ripple = document.createElement('div');
-      ripple.className = 'ripple';
-      ripple.style.left = (e.clientX - 40) + 'px';
-      ripple.style.top = (e.clientY - 40) + 'px';
-      ripple.style.width = '80px'; ripple.style.height = '80px';
-      scene.appendChild(ripple);
-      setTimeout(() => ripple.remove(), 1200);
-    });
+    // Csökkentett mozgás: a torzító réteget el is hagyjuk
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      waterImg.remove();
+    }
+
   <\/script>
 </body>
 </html>`;
@@ -1222,17 +1228,77 @@ ${oceanAudioSource}
       {/* overflow-clip, nem -hidden: a sodródó felhők túllógnak a boxon, így a
           jelenet görgethetővé válna, és egy gombfókusz elcsúsztatná az egész
           overlay-réteget (blur-sávok, nap, csillanások) a fotóhoz képest. */}
-      <div
-        className="absolute inset-0 cursor-crosshair overflow-clip"
-        onClick={handleSceneClick}
-      >
+      <div className="absolute inset-0 overflow-clip">
         {/* Base Seascape Image with Ocean Swell Animation */}
-        <img 
-          src={images[currentImageIndex].src} 
-          alt="Tengerparti Naplemente" 
+        <img
+          src={images[currentImageIndex].src}
+          alt="Tengerparti Naplemente"
           className="w-full h-full object-cover object-center scale-105 animate-ocean-swell transition-all duration-1000 ease-in-out"
           style={{ '--wave-period': `${waveSpeed}s` } as React.CSSProperties}
         />
+
+        {/* FOLYAMATOS VÍZMOZGÁS — magát a fotó vizét torzítjuk, nem rárakott sávokkal */}
+        {!prefersReducedMotion && (
+          <>
+            {/* Rejtett filter-definíció. A baseFrequency SMIL-lel leng oda-vissza,
+                a periódus a hullámritmus kétszerese — a csúszka a tempót adja. */}
+            <svg width="0" height="0" aria-hidden="true" className="absolute w-0 h-0 pointer-events-none">
+              <defs>
+                {/* sRGB: linearRGB-ben a másolat színe elcsúszna az alatta lévő
+                    fotóhoz képest, és a vágás peremén varrat látszana. */}
+                <filter
+                  id="water-motion"
+                  x="-10%"
+                  y="-10%"
+                  width="120%"
+                  height="120%"
+                  colorInterpolationFilters="sRGB"
+                >
+                  <feTurbulence
+                    type="turbulence"
+                    baseFrequency={WATER_BASE_FREQ}
+                    numOctaves="2"
+                    seed="7"
+                    result="noise"
+                  >
+                    {/* A puszta dur-csere nem indítja újra a SMIL-t, ezért a
+                        csúszka változásakor a key újramountolja az elemet. */}
+                    <animate
+                      key={waveSpeed}
+                      attributeName="baseFrequency"
+                      dur={`${(waveSpeed * 2).toFixed(1)}s`}
+                      values={WATER_FREQ_VALUES}
+                      repeatCount="indefinite"
+                    />
+                  </feTurbulence>
+                  <feDisplacementMap
+                    in="SourceGraphic"
+                    in2="noise"
+                    scale={waterScale}
+                    xChannelSelector="R"
+                    yChannelSelector="G"
+                  />
+                </filter>
+              </defs>
+            </svg>
+
+            {/* A fotó másolata a vízre vágva. SZÁNDÉKOSAN nincs saját z-indexe:
+                így közvetlenül az eredeti fölé, de a színszűrő, a nap és a
+                horizont-blur (z-5) ALÁ kerül — a part, az ég és a sziget érintetlen. */}
+            <img
+              src={images[currentImageIndex].src}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 w-full h-full object-cover object-center scale-105 animate-ocean-swell pointer-events-none transition-all duration-1000 ease-in-out"
+              style={{
+                '--wave-period': `${waveSpeed}s`,
+                clipPath: waterClip,
+                WebkitClipPath: waterClip,
+                filter: 'url(#water-motion)'
+              } as React.CSSProperties}
+            />
+          </>
+        )}
 
         {/* DYNAMIC HORIZON DEPTH-OF-FIELD BLUR & ATMOSPHERIC SEA SPRAY MIST LAYER */}
         {/* Három egymást átfedő réteg fokozódó blurral: egyetlen sáv látható
@@ -1414,49 +1480,12 @@ ${oceanAudioSource}
           })}
         </div>
 
-        {/* SWAYING PALM LEAF SILHOUETTE RESPONDING TO WIND */}
-        <div 
-          className="absolute bottom-0 right-0 w-64 h-80 pointer-events-none opacity-80 animate-palm-sway"
-          style={{
-            '--sway-period': `${6 / (windSpeed / 15)}s`,
-            '--wind-tilt': `${windSpeed / 4}deg`
-          } as React.CSSProperties}
-        >
-          <svg viewBox="0 0 200 300" className="w-full h-full fill-slate-950/80">
-            <path d="M180,300 Q150,180 120,100 Q100,50 60,30 Q90,70 110,130 Q140,220 180,300 Z" />
-            <path d="M120,100 Q60,80 0,90 Q40,110 100,120 Z" />
-            <path d="M120,100 Q50,40 10,10 Q50,60 105,100 Z" />
-            <path d="M120,100 Q110,30 100,0 Q120,40 122,95 Z" />
-          </svg>
-        </div>
-
-        {/* INTERACTIVE WATER RIPPLES ON CLICK */}
-        {ripples.map((r) => (
-          <div
-            key={r.id}
-            // z-[11]: a gyűrű a jelenet összes overlay-rétege fölé kerül (horizont-blur z-5,
-            // csillámok z-6, eső z-10), különben a backdrop-blur elmossa és a rétegek elnyelik.
-            // A fejléc / HUD (z-20) továbbra is fölötte marad.
-            className="absolute z-[11] rounded-full border-2 border-amber-200 bg-amber-300/15 pointer-events-none animate-ping"
-            style={{
-              left: r.x - r.size / 2,
-              top: r.y - r.size / 2,
-              width: r.size,
-              height: r.size,
-              animationDuration: '1.2s',
-              // additív keverés: világos, napsütötte vízen is látszik
-              mixBlendMode: 'plus-lighter'
-            }}
-          />
-        ))}
-
         {/* ZEN MODE EXIT BUTTON */}
         {isZenMode && (
           <div className="absolute top-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-slate-900/70 backdrop-blur-md border border-white/10 text-xs text-slate-300 flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
-            <span>{t('zenHint')}</span>
-            <button 
+            <button
               onClick={() => setIsZenMode(false)}
-              className={`ml-2 px-2.5 py-1 rounded-lg ${GLASS_ACTIVE} font-bold hover:bg-amber-400/25 transition-colors`}
+              className={`px-2.5 py-1 rounded-lg ${GLASS_ACTIVE} font-bold hover:bg-amber-400/25 transition-colors`}
             >
               <Minimize className="w-3.5 h-3.5 inline mr-1" />
               {t('exit')}
@@ -1915,14 +1944,6 @@ ${oceanAudioSource}
             )}
 
           </div>
-        </div>
-      )}
-
-      {/* FOOTER HINT */}
-      {!isZenMode && (
-        <div className="absolute bottom-1 right-4 z-10 hidden lg:flex items-center gap-1.5 text-[10px] text-slate-300 bg-slate-950/40 px-3 py-1 rounded-full backdrop-blur-sm">
-          <Info className="w-3 h-3 text-amber-400" />
-          <span>{t('rippleHint')}</span>
         </div>
       )}
 
