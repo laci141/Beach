@@ -1,4 +1,6 @@
-# Beach — Interactive Ocean Ambience
+# Tengermoraj — Interactive Ocean Ambience
+
+**Live: <https://beach-542.pages.dev>**
 
 A calm-down web app: animated seascapes with **procedurally generated ocean sound**.
 There are no audio files in this project — every wave, gust and raindrop you hear is
@@ -11,30 +13,47 @@ no API key and no tracking.
 
 ## Features
 
+**Living water.** The sea surface ripples continuously through an animated SVG
+turbulence filter applied to a clipped copy of the photo, so the water moves while the
+sand, sky and foliage stay sharp. The wave-rhythm slider sets its tempo.
+
 **Living scenes.** Three high-resolution seascapes with a slow breathing zoom, drifting
-clouds, a sun glow anchored to the actual sun position in each photo, and a sparkle path
-that follows the water surface.
+clouds, a three-layer depth-of-field haze on the horizon, a sun glow anchored to the
+actual sun position in each photo, and a sparkle path that follows the water surface.
 
 **Procedural audio.** Four sound profiles — Sandy Shore, Rocky Shore, Open Ocean and
 Rain at Sea. Switching between them re-tunes the filter graph continuously, so there are
 no clicks or gaps.
 
 **Live controls.** Wind speed drives both the sound and the atmospheric horizon blur.
-Wave rhythm sets the swell period of the audio LFO. Sun intensity controls how much the
-water glitters. Every slider affects the running audio graph in real time.
+Wave rhythm sets the swell period of the audio LFO and the tempo of the water motion.
+Sun intensity controls how much the water glitters. Every slider affects the running
+audio graph in real time.
 
 **Four moods.** Golden Hour, Red Sunset, Twilight and Quiet Night change the colour
-grading of the scene and the intensity of the water sparkles.
+grading of the scene and the intensity of the water sparkles. They can follow the local
+clock automatically, or be set by hand.
 
-**Meditation timer.** Set a duration and get a soft sine chime when it ends.
+**Meditation and sleep timer.** Set a duration and get a soft sine chime when it ends —
+or, if audio is playing, a ten-second fade to silence instead, for falling asleep to.
 
-**Zen mode.** Hides the whole interface. Click anywhere on the sea to send out ripples.
+**Screen stays awake.** While sound is playing the Wake Lock API keeps the display on,
+so the session is not cut short by the screen timeout.
+
+**Remembers everything.** Language, sound profile, slider positions, mood and the
+selected image are restored on the next visit.
+
+**Installable.** A web app manifest makes it installable to the home screen on mobile,
+where it opens full-screen with its own icon.
+
+**Zen mode.** Hides the whole interface so only the scene remains.
 
 **Standalone export.** One button downloads a single self-contained `.html` file with the
 image embedded as base64 and the full audio engine inlined. It works offline, with no
 server and no dependencies — just open it in a browser.
 
-**Four languages.** Hungarian, English, Romanian and German interface, with the choice remembered between visits.
+**Four languages.** Hungarian, English, Romanian and German interface, with the choice
+remembered between visits.
 
 ---
 
@@ -68,6 +87,7 @@ exported file can never drift from the app.
 | Styling | Tailwind CSS 4 |
 | Icons | lucide-react |
 | Audio | Web Audio API (no libraries) |
+| Hosting | Cloudflare Pages |
 
 No backend, no database, no environment variables.
 
@@ -97,6 +117,9 @@ npm run lint      # TypeScript type check
 ## Project structure
 
 ```
+public/
+  icon.svg                app icon
+  manifest.webmanifest    PWA manifest
 src/
   App.tsx                 the whole UI and scene composition
   index.css               Tailwind entry + all keyframe animations
@@ -116,9 +139,13 @@ export, which extracts the `@layer utilities` block at build time.
 ## Notes
 
 The scenes rely on per-image tuning data stored alongside each photo: the sun position,
-the vertical band of water, and a `clip-path` polygon describing the water surface so
-that sparkles never land on sand, grass or sky. If you swap in your own photos, those
-values need adjusting.
+the vertical band of water, and a `clip-path` polygon describing the water surface. That
+polygon does double duty — it keeps the sparkles off sand, grass and sky, and it masks
+the animated displacement layer so only the sea ripples. If you swap in your own photos,
+those values need adjusting.
+
+There is deliberately no service worker: the app is small enough to load quickly, and
+skipping it avoids stale-cache surprises after a deploy.
 
 ---
 
