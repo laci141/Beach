@@ -1434,13 +1434,18 @@ ${oceanAudioSource}
         {ripples.map((r) => (
           <div
             key={r.id}
-            className="absolute rounded-full border-2 border-amber-200/80 bg-amber-300/20 pointer-events-none animate-ping"
+            // z-[11]: a gyűrű a jelenet összes overlay-rétege fölé kerül (horizont-blur z-5,
+            // csillámok z-6, eső z-10), különben a backdrop-blur elmossa és a rétegek elnyelik.
+            // A fejléc / HUD (z-20) továbbra is fölötte marad.
+            className="absolute z-[11] rounded-full border-2 border-amber-200 bg-amber-300/15 pointer-events-none animate-ping"
             style={{
               left: r.x - r.size / 2,
               top: r.y - r.size / 2,
               width: r.size,
               height: r.size,
-              animationDuration: '1.2s'
+              animationDuration: '1.2s',
+              // additív keverés: világos, napsütötte vízen is látszik
+              mixBlendMode: 'plus-lighter'
             }}
           />
         ))}
