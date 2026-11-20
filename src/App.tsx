@@ -90,6 +90,7 @@ const T = {
     ro: 'Tipul și Caracterul Sunetului Marin',
     de: 'Meeresklang-Profil & Charakter'
   },
+  volumeLabel: { hu: 'Hangerő', en: 'Volume', ro: 'Volum', de: 'Lautstärke' },
   windLabel: {
     hu: 'Szélsebesség & Horizont Mélységélesség',
     en: 'Wind Speed & Horizon Depth-of-Field',
@@ -1221,8 +1222,30 @@ ${oceanAudioSource}
     }
   };
 
+  // Bottom-fade scroll hint: shown while the panel has more content below the fold.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [canScrollMore, setCanScrollMore] = useState(false);
+  const updateScrollHint = useCallback(() => {
+    const el = panelRef.current;
+    setCanScrollMore(!!el && el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+  }, []);
+  useEffect(() => {
+    updateScrollHint();
+    const el = panelRef.current;
+    window.addEventListener('resize', updateScrollHint);
+    const ro = typeof ResizeObserver !== 'undefined' && el ? new ResizeObserver(updateScrollHint) : null;
+    if (ro && el) {
+      ro.observe(el);
+      Array.from(el.children).forEach((c) => ro.observe(c));
+    }
+    return () => {
+      window.removeEventListener('resize', updateScrollHint);
+      ro?.disconnect();
+    };
+  }, [updateScrollHint, activeTab, isPlayingAudio, lang, isZenMode]);
+
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-slate-950 text-slate-100 select-none">
+    <div className="relative w-screen h-dvh overflow-hidden bg-slate-950 text-slate-100 select-none">
       
       {/* BACKGROUND SEASCAPE IMAGE & ANIMATED WAVE LAYERS */}
       {/* overflow-clip, nem -hidden: a sodródó felhők túllógnak a boxon, így a
@@ -1485,7 +1508,7 @@ ${oceanAudioSource}
           <div className="absolute top-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-slate-900/70 backdrop-blur-md border border-white/10 text-xs text-slate-300 flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
             <button
               onClick={() => setIsZenMode(false)}
-              className={`px-2.5 py-1 rounded-lg ${GLASS_ACTIVE} font-bold hover:bg-amber-400/25 transition-colors`}
+              className={`min-h-11 min-w-11 px-2.5 py-1 rounded-lg ${GLASS_ACTIVE} font-bold hover:bg-amber-400/25 transition-colors`}
             >
               <Minimize className="w-3.5 h-3.5 inline mr-1" />
               {t('exit')}
@@ -1519,7 +1542,7 @@ ${oceanAudioSource}
                 {/* Download Standalone HTML Button — mobilon nincs rá hely */}
                 <button
                   onClick={downloadStandaloneHtml}
-                  className={`hidden md:inline-flex md:order-1 px-3 py-2 rounded-xl ${GLASS_ACTIVE} hover:bg-amber-400/25 text-xs font-semibold items-center gap-1.5 transition-all shadow-md`}
+                  className={`hidden md:inline-flex md:order-1 min-h-11 min-w-11 justify-center px-3 py-2 rounded-xl ${GLASS_ACTIVE} hover:bg-amber-400/25 text-xs font-semibold items-center gap-1.5 transition-all shadow-md`}
                   title={t('downloadTitle')}
                 >
                   <Download className="w-4 h-4 text-amber-400" />
@@ -1529,7 +1552,7 @@ ${oceanAudioSource}
                 {/* Audio Toggle */}
                 <button
                   onClick={toggleAudio}
-                  className={`md:order-2 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all duration-300 shadow-md ${
+                  className={`md:order-2 min-h-11 min-w-11 justify-center px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all duration-300 shadow-md ${
                     isPlayingAudio
                       ? `${GLASS_ACTIVE} shadow-amber-400/15 hover:bg-amber-400/25`
                       : 'bg-slate-900/80 text-slate-200 border border-slate-700/60 hover:bg-slate-800'
@@ -1544,7 +1567,7 @@ ${oceanAudioSource}
                 {/* Zen Mode */}
                 <button
                   onClick={() => setIsZenMode(true)}
-                  className="md:order-4 p-2 rounded-xl bg-slate-900/80 border border-slate-700/60 text-slate-300 hover:text-amber-300 hover:bg-slate-800 transition-all"
+                  className="md:order-4 min-h-11 min-w-11 flex items-center justify-center p-2 rounded-xl bg-slate-900/80 border border-slate-700/60 text-slate-300 hover:text-amber-300 hover:bg-slate-800 transition-all"
                   title={t('zenView')}
                 >
                   <Maximize className="w-4 h-4" />
@@ -1558,7 +1581,7 @@ ${oceanAudioSource}
                     key={code}
                     onClick={() => setLang(code)}
                     aria-pressed={lang === code}
-                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold uppercase transition-all ${
+                    className={`min-h-11 min-w-11 px-2 py-1.5 rounded-lg text-xs font-bold uppercase transition-all ${
                       lang === code
                         ? GLASS_ACTIVE
                         : 'border border-slate-700/60 bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800'
@@ -1575,62 +1598,73 @@ ${oceanAudioSource}
 
       {/* CONTROL HUD */}
       {!isZenMode && (
-        <div className="absolute bottom-2 left-2 right-2 md:bottom-4 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-full md:max-w-lg z-20 pointer-events-auto">
+        <div className="absolute bottom-2 left-2 right-2 md:bottom-4 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-full md:max-w-xl z-20 pointer-events-auto">
 
           {/* TABS — mobilon vízszintesen görgethető, hogy a Timer fül se vágódjon le */}
-          <div className={`flex flex-nowrap items-center gap-1 whitespace-nowrap overflow-x-auto hide-scrollbar p-1.5 mb-3 ${GLASS_PANEL}`}>
+          <div role="tablist" className={`flex flex-nowrap items-center gap-1 whitespace-nowrap overflow-x-auto hide-scrollbar p-1.5 mb-3 ${GLASS_PANEL}`}>
             <button
+              role="tab"
+              aria-selected={activeTab === 'controls'}
               onClick={() => setActiveTab('controls')}
-              className={`shrink-0 md:flex-1 md:min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`shrink-0 sm:flex-1 sm:min-w-0 min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'controls' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              <Sliders className="w-3 h-3" />
-              <span>{t('tabControls')}</span>
+              <Sliders className="w-4 h-4 shrink-0" />
+              <span className={activeTab === 'controls' ? 'whitespace-nowrap' : 'sr-only sm:not-sr-only whitespace-nowrap'}>{t('tabControls')}</span>
             </button>
 
             <button
+              role="tab"
+              aria-selected={activeTab === 'presets'}
               onClick={() => setActiveTab('presets')}
-              className={`shrink-0 md:flex-1 md:min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`shrink-0 sm:flex-1 sm:min-w-0 min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'presets' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              <Sparkles className="w-3 h-3" />
-              <span>{t('tabPresets')}</span>
+              <Sparkles className="w-4 h-4 shrink-0" />
+              <span className={activeTab === 'presets' ? 'whitespace-nowrap' : 'sr-only sm:not-sr-only whitespace-nowrap'}>{t('tabPresets')}</span>
             </button>
 
             <button
+              role="tab"
+              aria-selected={activeTab === 'gallery'}
               onClick={() => setActiveTab('gallery')}
-              className={`shrink-0 md:flex-1 md:min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`shrink-0 sm:flex-1 sm:min-w-0 min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'gallery' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              <Image className="w-3 h-3" />
-              <span>{t('tabGallery')}</span>
+              <Image className="w-4 h-4 shrink-0" />
+              <span className={activeTab === 'gallery' ? 'whitespace-nowrap' : 'sr-only sm:not-sr-only whitespace-nowrap'}>{t('tabGallery')}</span>
             </button>
 
             <button
+              role="tab"
+              aria-selected={activeTab === 'timer'}
               onClick={() => setActiveTab('timer')}
-              className={`shrink-0 md:flex-1 md:min-w-0 py-1.5 px-1.5 rounded-xl text-[11px] leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`shrink-0 sm:flex-1 sm:min-w-0 min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'timer' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
             >
-              <Clock className="w-3 h-3" />
-              <span>{t('tabTimer')}</span>
+              <Clock className="w-4 h-4 shrink-0" />
+              <span className={activeTab === 'timer' ? 'whitespace-nowrap' : 'sr-only sm:not-sr-only whitespace-nowrap'}>{t('tabTimer')}</span>
             </button>
           </div>
 
-          {/* TAB CONTENT */}
+          {/* TAB CONTENT — wrapper carries the bottom fade scroll hint */}
+          <div className="relative">
           <div
-            className={`p-3 md:p-3.5 text-slate-200 max-h-[52vh] overflow-y-auto overflow-x-hidden ${GLASS_PANEL}`}
+            ref={panelRef}
+            onScroll={updateScrollHint}
+            className={`p-3 md:p-3.5 text-slate-200 max-h-[52dvh] md:max-h-[62dvh] overflow-y-auto overflow-x-hidden ${GLASS_PANEL}`}
             // Diszkrét görgetősáv, hogy a magasság-korlát ne rondítson bele az üveghatásba
             style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(251,191,36,0.35) transparent' }}
           >
@@ -1653,7 +1687,7 @@ ${oceanAudioSource}
                         <button
                           key={type.id}
                           onClick={() => setSoundType(type.id as SoundType)}
-                          className={`p-2 rounded-xl text-left border transition-all flex flex-col justify-between ${
+                          className={`min-h-11 p-2 rounded-xl text-left border transition-all flex flex-col justify-between ${
                             isSelected
                               ? `${GLASS_ACTIVE} shadow-lg shadow-amber-400/10`
                               : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-slate-700'
@@ -1666,7 +1700,7 @@ ${oceanAudioSource}
                             <IconComp className={`w-3 h-3 shrink-0 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
                           </div>
                           {/* Mobilon csak a profil neve fér el kényelmesen */}
-                          <span className="hidden sm:block text-[10px] text-slate-400 mt-0.5">
+                          <span className="hidden sm:block text-xs text-slate-400 mt-0.5">
                             {tr(type.desc)}
                           </span>
                         </button>
@@ -1684,7 +1718,7 @@ ${oceanAudioSource}
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
                       {/* Diagnosztikai kijelző — keskeny kijelzőn nem fér el a felirat mellé */}
-                      <span className="hidden sm:inline text-[10px] text-amber-300/80 font-mono opacity-70">
+                      <span className="hidden sm:inline text-xs text-amber-300/80 font-mono opacity-70">
                         {`${t('dofBlur')}: ${horizonBlurPx.toFixed(1)}px`}
                       </span>
                       <span className="text-amber-400 font-bold whitespace-nowrap">{windSpeed} km/h</span>
@@ -1692,13 +1726,14 @@ ${oceanAudioSource}
                   </div>
                   <input
                     type="range"
+                    aria-label={t('windLabel')}
                     min="5"
                     max="100"
                     value={windSpeed}
                     onChange={(e) => setWindSpeed(Number(e.target.value))}
-                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
+                    className="range-touch range-amber w-full h-11 cursor-pointer"
                   />
-                  <div className="hidden sm:flex justify-between text-[10px] text-slate-400 opacity-70 mt-0.5">
+                  <div className="hidden sm:flex justify-between text-xs text-slate-400 opacity-70 mt-0.5">
                     <span>{t('windMin')}</span>
                     <span>{t('windMax')}</span>
                   </div>
@@ -1715,14 +1750,15 @@ ${oceanAudioSource}
                   </div>
                   <input
                     type="range"
+                    aria-label={t('waveLabel')}
                     min="1.5"
                     max="8"
                     step="0.1"
                     value={waveSpeed}
                     onChange={(e) => setWaveSpeed(Number(e.target.value))}
-                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400"
+                    className="range-touch range-sky w-full h-11 cursor-pointer"
                   />
-                  <div className="hidden sm:flex justify-between text-[10px] text-slate-400 opacity-70 mt-0.5">
+                  <div className="hidden sm:flex justify-between text-xs text-slate-400 opacity-70 mt-0.5">
                     <span>{t('waveMin')}</span>
                     <span>{t('waveMax')}</span>
                   </div>
@@ -1739,13 +1775,14 @@ ${oceanAudioSource}
                   </div>
                   <input
                     type="range"
+                    aria-label={t('sunLabel')}
                     min="10"
                     max="100"
                     value={sunGlow}
                     onChange={(e) => setSunGlow(Number(e.target.value))}
-                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
+                    className="range-touch range-amber w-full h-11 cursor-pointer"
                   />
-                  <div className="hidden sm:flex justify-between text-[10px] text-slate-400 opacity-70 mt-0.5">
+                  <div className="hidden sm:flex justify-between text-xs text-slate-400 opacity-70 mt-0.5">
                     <span>{t('sunMin')}</span>
                     <span>{t('sunMax')}</span>
                   </div>
@@ -1763,7 +1800,7 @@ ${oceanAudioSource}
                       role="switch"
                       aria-checked={autoMood}
                       onClick={() => setAutoMood((prev) => !prev)}
-                      className={`shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-semibold whitespace-nowrap transition-all ${
+                      className={`shrink-0 min-h-11 min-w-11 justify-center flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs font-semibold whitespace-nowrap transition-all ${
                         autoMood
                           ? GLASS_ACTIVE
                           : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:text-slate-200'
@@ -1803,7 +1840,7 @@ ${oceanAudioSource}
                           setAutoMood(false);
                           setTimeOfDay(mode.id as TimeOfDay);
                         }}
-                        className={`p-1.5 rounded-xl text-[10px] font-medium flex flex-col items-center gap-1 border transition-all ${
+                        className={`min-h-11 p-1.5 rounded-xl text-xs font-medium flex flex-col items-center gap-1 border transition-all ${
                           timeOfDay === mode.id
                             ? `${GLASS_ACTIVE} font-bold`
                             : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:text-slate-200'
@@ -1822,12 +1859,13 @@ ${oceanAudioSource}
                     <Volume2 className="w-4 h-4 text-amber-400 shrink-0" />
                     <input
                       type="range"
+                      aria-label={t('volumeLabel')}
                       min="0"
                       max="1"
                       step="0.01"
                       value={audioVolume}
                       onChange={(e) => setAudioVolume(Number(e.target.value))}
-                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
+                      className="range-touch range-amber w-full h-11 cursor-pointer"
                     />
                     <span className="text-xs text-slate-300 w-8 shrink-0 whitespace-nowrap text-right font-medium">{Math.round(audioVolume * 100)}%</span>
                   </div>
@@ -1846,13 +1884,13 @@ ${oceanAudioSource}
                     <button
                       key={idx}
                       onClick={() => applyPreset(preset)}
-                      className="p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 hover:border-amber-500/50 text-left transition-all flex items-start justify-between group"
+                      className="min-h-11 p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 hover:border-amber-500/50 text-left transition-all flex items-start justify-between group"
                     >
                       <div>
                         <h3 className="text-xs font-bold text-amber-200 group-hover:text-amber-300">
                           {tr(preset.name)}
                         </h3>
-                        <p className="text-[10px] text-slate-300 mt-0.5">
+                        <p className="text-xs text-slate-300 mt-0.5">
                           {`${t('windShort')}: ${preset.windSpeed} km/h • ${t('waveShort')}: ${preset.waveSpeed}s`}
                         </p>
                       </div>
@@ -1874,7 +1912,7 @@ ${oceanAudioSource}
                     <button
                       key={idx}
                       onClick={() => setCurrentImageIndex(idx)}
-                      className={`relative rounded-xl overflow-hidden aspect-video border-2 transition-all ${
+                      className={`relative min-h-11 min-w-11 rounded-xl overflow-hidden aspect-video border-2 transition-all ${
                         currentImageIndex === idx
                           ? 'border-amber-400/45 ring-2 ring-amber-400/30 scale-[1.02]'
                           : 'border-slate-800 opacity-70 hover:opacity-100 hover:border-slate-600'
@@ -1882,7 +1920,7 @@ ${oceanAudioSource}
                     >
                       <img src={img.src} alt={tr(img.title)} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent p-1.5 flex items-end">
-                        <span className="text-[9px] font-semibold text-slate-200 line-clamp-1">
+                        <span className="text-xs font-semibold text-slate-200 line-clamp-1">
                           {tr(img.title)}
                         </span>
                       </div>
@@ -1899,7 +1937,7 @@ ${oceanAudioSource}
                   <span className="text-3xl font-mono font-bold text-amber-300 tracking-wider">
                     {timerSecondsLeft !== null ? formatTimerTime(timerSecondsLeft) : `${timerMinutes}:00`}
                   </span>
-                  <p className="text-[11px] text-slate-300 mt-1">
+                  <p className="text-xs text-slate-300 mt-1">
                     {isTimerRunning 
                       ? t('meditationActive')
                       : t('timerIntro')}
@@ -1913,7 +1951,7 @@ ${oceanAudioSource}
                         <button
                           key={m}
                           onClick={() => setTimerMinutes(m)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                          className={`min-h-11 min-w-11 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                             timerMinutes === m
                               ? GLASS_ACTIVE
                               : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
@@ -1925,7 +1963,7 @@ ${oceanAudioSource}
                     </div>
                     <button
                       onClick={startTimer}
-                      className={`w-full py-2.5 rounded-xl ${GLASS_ACTIVE} font-bold text-xs shadow-lg shadow-amber-400/15 hover:bg-amber-400/25 transition-all flex items-center justify-center gap-2`}
+                      className={`w-full min-h-11 py-2.5 rounded-xl ${GLASS_ACTIVE} font-bold text-xs shadow-lg shadow-amber-400/15 hover:bg-amber-400/25 transition-all flex items-center justify-center gap-2`}
                     >
                       <Play className="w-4 h-4 fill-current" />
                       <span>{t('startSession')}</span>
@@ -1934,7 +1972,7 @@ ${oceanAudioSource}
                 ) : (
                   <button
                     onClick={stopTimer}
-                    className="w-full py-2.5 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold text-xs hover:bg-rose-500/30 transition-all flex items-center justify-center gap-2"
+                    className="w-full min-h-11 py-2.5 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold text-xs hover:bg-rose-500/30 transition-all flex items-center justify-center gap-2"
                   >
                     <Pause className="w-4 h-4" />
                     <span>{t('stopTimer')}</span>
@@ -1943,6 +1981,13 @@ ${oceanAudioSource}
               </div>
             )}
 
+          </div>
+          {canScrollMore && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-px bottom-px h-10 rounded-b-2xl bg-gradient-to-t from-slate-950/80 to-transparent"
+            />
+          )}
           </div>
         </div>
       )}

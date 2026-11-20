@@ -99,3 +99,49 @@ body {
 }
 
 
+
+/* Touch-friendly range inputs: the input box is 44px tall (set via h-11 in App.tsx),
+   the visible track stays 8px. Thumb colour comes from --range-thumb per slider. */
+.range-touch {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  --range-thumb: #fbbf24;
+}
+.range-sky { --range-thumb: #38bdf8; }
+.range-amber { --range-thumb: #fbbf24; }
+
+.range-touch::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 8px;
+  background: #1e293b;
+}
+.range-touch::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -8px; /* centre 24px thumb on the 8px track */
+  border-radius: 50%;
+  border: 0;
+  background: var(--range-thumb);
+}
+.range-touch::-moz-range-track {
+  height: 8px;
+  border-radius: 8px;
+  background: #1e293b;
+}
+.range-touch::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--range-thumb);
+}
+
+/* Visible keyboard focus for buttons and range inputs */
+button:focus-visible,
+input[type="range"]:focus-visible {
+  outline: 2px solid #fbbf24;
+  outline-offset: 2px;
+}
