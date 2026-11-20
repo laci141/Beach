@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Volume2, VolumeX, Wind, Waves, Sun, Maximize, Minimize,
   Play, Pause, Sparkles, Image, Clock, Sliders, Compass, Download,
-  CloudRain, Mountain, Anchor,
+  CloudRain, Mountain, Anchor, PanelBottomClose, PanelBottomOpen,
   type LucideIcon
 } from 'lucide-react';
 
@@ -75,6 +75,8 @@ const T = {
   soundOn: { hu: 'Hang Be', en: 'Sound On', ro: 'Sunet Pornit', de: 'Ton An' },
   playSound: { hu: 'Hang Indítása', en: 'Play Sound', ro: 'Pornește Sunetul', de: 'Ton Abspielen' },
   zenView: { hu: 'Zen Képernyő', en: 'Zen View', ro: 'Mod Zen', de: 'Zen-Ansicht' },
+  panelHide: { hu: 'Panel elrejtése', en: 'Hide panel', ro: 'Ascunde panoul', de: 'Panel ausblenden' },
+  panelShow: { hu: 'Panel megjelenítése', en: 'Show panel', ro: 'Afișează panoul', de: 'Panel einblenden' },
   tabControls: {
     hu: 'Beállítások & Hang',
     en: 'Controls & Audio',
@@ -675,6 +677,28 @@ export default function App() {
 
   // Interface state
   const [isZenMode, setIsZenMode] = useState<boolean>(false);
+  // Panel visibility: saved choice wins, otherwise start closed on short (landscape) viewports
+  const [isPanelOpen, setIsPanelOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('gallery-panel-open');
+      if (saved === '1') return true;
+      if (saved === '0') return false;
+    } catch {
+      /* storage unavailable: fall through to the media query */
+    }
+    try {
+      return !window.matchMedia('(max-height: 520px)').matches;
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('gallery-panel-open', isPanelOpen ? '1' : '0');
+    } catch {
+      /* storage unavailable: ignore */
+    }
+  }, [isPanelOpen]);
   const [activeTab, setActiveTab] = useState<'controls' | 'presets' | 'timer' | 'gallery'>('controls');
   const [timerMinutes, setTimerMinutes] = useState<number>(10);
   const [timerSecondsLeft, setTimerSecondsLeft] = useState<number | null>(null);
@@ -1242,7 +1266,7 @@ ${oceanAudioSource}
       window.removeEventListener('resize', updateScrollHint);
       ro?.disconnect();
     };
-  }, [updateScrollHint, activeTab, isPlayingAudio, lang, isZenMode]);
+  }, [updateScrollHint, activeTab, isPlayingAudio, lang, isZenMode, isPanelOpen]);
 
   return (
     <div className="relative w-screen h-dvh overflow-hidden bg-slate-950 text-slate-100 select-none">
@@ -1572,6 +1596,18 @@ ${oceanAudioSource}
                 >
                   <Maximize className="w-4 h-4" />
                 </button>
+
+                {/* Panel show/hide */}
+                <button
+                  onClick={() => setIsPanelOpen((v) => !v)}
+                  aria-expanded={isPanelOpen}
+                  aria-controls="control-panel"
+                  aria-label={isPanelOpen ? t('panelHide') : t('panelShow')}
+                  className="md:order-5 min-h-11 min-w-11 flex items-center justify-center p-2 rounded-xl bg-slate-900/80 border border-slate-700/60 text-slate-300 hover:text-amber-300 hover:bg-slate-800 transition-all"
+                  title={isPanelOpen ? t('panelHide') : t('panelShow')}
+                >
+                  {isPanelOpen ? <PanelBottomClose className="w-4 h-4" /> : <PanelBottomOpen className="w-4 h-4" />}
+                </button>
               </div>
 
               {/* Language Switcher — négy nyelv, az aktívon az egységes üveg-stílus */}
@@ -1598,7 +1634,7 @@ ${oceanAudioSource}
 
       {/* CONTROL HUD */}
       {!isZenMode && (
-        <div className="absolute bottom-2 left-2 right-2 md:bottom-4 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-full md:max-w-xl z-20 pointer-events-auto">
+        <div id="control-panel" className={`${isPanelOpen ? '' : 'hidden '}absolute bottom-2 left-2 right-2 md:bottom-4 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-full md:max-w-xl z-20 pointer-events-auto`}>
 
           {/* TABS — mobilon vízszintesen görgethető, hogy a Timer fül se vágódjon le */}
           <div role="tablist" className={`flex flex-nowrap items-center gap-1 whitespace-nowrap overflow-x-auto hide-scrollbar p-1.5 mb-3 ${GLASS_PANEL}`}>
