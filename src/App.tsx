@@ -1644,7 +1644,7 @@ ${oceanAudioSource}
               aria-selected={activeTab === 'controls'}
               onClick={() => setActiveTab('controls')}
               title={t('tabControls')}
-              className={`shrink-0 sm:flex-1 sm:min-w-0 min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${activeTab === 'controls' ? 'shrink-0 sm:flex-1 sm:min-w-fit' : 'shrink-0 sm:flex-none'} ${
                 activeTab === 'controls' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -1659,7 +1659,7 @@ ${oceanAudioSource}
               aria-selected={activeTab === 'presets'}
               onClick={() => setActiveTab('presets')}
               title={t('tabPresets')}
-              className={`shrink-0 sm:flex-1 sm:min-w-0 min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${activeTab === 'presets' ? 'shrink-0 sm:flex-1 sm:min-w-fit' : 'shrink-0 sm:flex-none'} ${
                 activeTab === 'presets' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -1674,7 +1674,7 @@ ${oceanAudioSource}
               aria-selected={activeTab === 'gallery'}
               onClick={() => setActiveTab('gallery')}
               title={t('tabGallery')}
-              className={`shrink-0 sm:flex-1 sm:min-w-0 min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${activeTab === 'gallery' ? 'shrink-0 sm:flex-1 sm:min-w-fit' : 'shrink-0 sm:flex-none'} ${
                 activeTab === 'gallery' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -1689,7 +1689,7 @@ ${oceanAudioSource}
               aria-selected={activeTab === 'timer'}
               onClick={() => setActiveTab('timer')}
               title={t('tabTimer')}
-              className={`shrink-0 sm:flex-1 sm:min-w-0 min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${activeTab === 'timer' ? 'shrink-0 sm:flex-1 sm:min-w-fit' : 'shrink-0 sm:flex-none'} ${
                 activeTab === 'timer' 
                   ? GLASS_ACTIVE
                   : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -1753,14 +1753,12 @@ ${oceanAudioSource}
                       <Wind className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                       {t('windLabel')}
                     </span>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {/* Diagnosztikai kijelző — keskeny kijelzőn nem fér el a felirat mellé */}
-                      <span className="hidden sm:inline text-xs text-amber-300/80 font-mono opacity-70">
-                        {`${t('dofBlur')}: ${horizonBlurPx.toFixed(1)}px`}
-                      </span>
-                      <span className="text-amber-400 font-bold whitespace-nowrap">{windSpeed} km/h</span>
-                    </div>
+                    <span className="text-amber-400 font-bold whitespace-nowrap shrink-0">{windSpeed} km/h</span>
                   </div>
+                  {/* Diagnosztikai kijelző — saját sorban, hogy ne szűkítse a felirat sorát */}
+                  <span className="hidden sm:block text-xs text-amber-300/80 font-mono opacity-70 mb-1">
+                    {`${t('dofBlur')}: ${horizonBlurPx.toFixed(1)}px`}
+                  </span>
                   <input
                     type="range"
                     aria-label={t('windLabel')}
@@ -1938,8 +1936,8 @@ ${oceanAudioSource}
                       }`}
                     >
                       <img src={img.src} alt={tr(img.title)} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent p-1.5 flex items-end">
-                        <span className="text-xs font-semibold text-slate-200 line-clamp-1">
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-transparent p-1.5 flex items-end">
+                        <span className="text-xs font-semibold text-slate-200 line-clamp-2 leading-tight">
                           {tr(img.title)}
                         </span>
                       </div>
