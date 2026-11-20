@@ -676,7 +676,7 @@ export default function App() {
       /* storage unavailable: fall through to the media query */
     }
     try {
-      return !window.matchMedia('(max-height: 520px)').matches;
+      return !window.matchMedia('(max-height: 520px), (max-width: 767px)').matches;
     } catch {
       return true;
     }
@@ -1559,7 +1559,14 @@ ${oceanAudioSource}
 
       {/* CONTROL HUD */}
       {!isZenMode && (
-        <div id="control-panel" className={`${isPanelOpen ? 'absolute bottom-2 left-2 right-2 md:top-20 md:bottom-4 md:right-4 md:left-auto md:w-[420px] md:flex md:flex-col z-20 pointer-events-auto' : 'hidden'}`}>
+        <div
+          id="control-panel"
+          ref={panelRef}
+          onScroll={updateScrollHint}
+          className={`${isPanelOpen ? 'absolute bottom-2 left-2 right-2 max-h-[min(70dvh,calc(100dvh-4.5rem))] md:top-20 md:bottom-auto md:max-h-[calc(100dvh-6rem)] md:right-4 md:left-auto md:w-[420px] md:flex md:flex-col overflow-y-auto overflow-x-hidden overscroll-contain z-20 pointer-events-auto' : 'hidden'}`}
+          // Diszkrét görgetősáv, hogy a magasság-korlát ne rondítson bele az üveghatásba
+          style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(251,191,36,0.35) transparent' }}
+        >
 
           {/* TOP SECTION — title, download, zen, sound, volume, language */}
           <div className={`p-3 mb-3 flex flex-col gap-2 md:shrink-0 ${GLASS_PANEL}`}>
@@ -1694,13 +1701,9 @@ ${oceanAudioSource}
           </div>
 
           {/* TAB CONTENT — wrapper carries the bottom fade scroll hint */}
-          <div className="relative md:flex-1 md:min-h-0 md:flex md:flex-col">
+          <div className="relative">
           <div
-            ref={panelRef}
-            onScroll={updateScrollHint}
-            className={`p-3 md:p-3.5 text-slate-200 max-h-[52dvh] md:max-h-none md:flex-1 md:min-h-0 overflow-y-auto overflow-x-hidden ${GLASS_PANEL}`}
-            // Diszkrét görgetősáv, hogy a magasság-korlát ne rondítson bele az üveghatásba
-            style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(251,191,36,0.35) transparent' }}
+            className={`p-3 md:p-3.5 text-slate-200 ${GLASS_PANEL}`}
           >
             
             {/* TAB 1: CONTROLS & SOUND PROFILE */}
@@ -1998,13 +2001,13 @@ ${oceanAudioSource}
             )}
 
           </div>
+          </div>
           {canScrollMore && (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-px bottom-px h-10 rounded-b-2xl bg-gradient-to-t from-slate-950/80 to-transparent"
+              className="pointer-events-none sticky bottom-0 -mt-8 h-8 shrink-0 rounded-b-2xl bg-gradient-to-t from-slate-950/80 to-transparent"
             />
           )}
-          </div>
         </div>
       )}
 
