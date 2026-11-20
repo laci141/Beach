@@ -1924,23 +1924,23 @@ ${oceanAudioSource}
                 <p className="text-xs text-slate-300 mb-2">
                   {t('galleryIntro')}
                 </p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 gap-2 p-0.5">
                   {images.map((img, idx) => (
                     <button
+                      type="button"
                       key={idx}
                       onClick={() => setCurrentImageIndex(idx)}
-                      className={`relative min-h-11 min-w-11 rounded-xl overflow-hidden aspect-video border-2 transition-all ${
+                      aria-pressed={currentImageIndex === idx}
+                      className={`w-full min-h-11 flex items-center gap-3 p-1.5 rounded-xl border-2 text-left transition-all ${
                         currentImageIndex === idx
-                          ? 'border-amber-400/45 ring-2 ring-amber-400/30 scale-[1.02]'
+                          ? 'border-amber-400/45 ring-2 ring-amber-400/30'
                           : 'border-slate-800 opacity-70 hover:opacity-100 hover:border-slate-600'
                       }`}
                     >
-                      <img src={img.src} alt={tr(img.title)} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-transparent p-1.5 flex items-end">
-                        <span className="text-xs font-semibold text-slate-200 line-clamp-2 leading-tight">
-                          {tr(img.title)}
-                        </span>
-                      </div>
+                      <img src={img.src} alt={tr(img.title)} className="w-24 shrink-0 aspect-video rounded-lg object-cover" />
+                      <span className="min-w-0 flex-1 break-words text-xs font-semibold text-slate-200">
+                        {tr(img.title)}
+                      </span>
                     </button>
                   ))}
                 </div>
