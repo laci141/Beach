@@ -145,3 +145,8 @@ input[type="range"]:focus-visible {
   outline: 2px solid #fbbf24;
   outline-offset: 2px;
 }
+
+/* Desktop: smaller panel text (mobile stays 12px). ID selector beats Tailwind .text-xs */
+@media (min-width: 768px) {
+  #control-panel .text-xs { font-size: 11px; line-height: 1.35; }
+}
