@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Volume2, VolumeX, Wind, Waves, Sun, Maximize, Minimize,
-  Play, Pause, Sparkles, Image, Clock, Sliders, Compass, Download,
-  CloudRain, Mountain, Anchor, PanelBottomClose, PanelBottomOpen,
+  Play, Pause, Sparkles, Image, Clock, Sliders, Download,
+  CloudRain, Mountain, Anchor, PanelBottomClose, PanelBottomOpen, PanelRightClose, PanelRightOpen,
   type LucideIcon
 } from 'lucide-react';
 
@@ -54,23 +54,11 @@ const T = {
     ro: 'Freamătul Mării',
     de: 'Meeresrauschen'
   },
-  subtitle: {
-    hu: 'Élő hullámzás, szélmozgás és mélységélesség elmosódás',
-    en: 'Dynamic waves, breeze motion & depth-of-field blur',
-    ro: 'Valuri dinamice, briză și estompare a orizontului',
-    de: 'Dynamische Wellen, Wind und Tiefenunschärfe'
-  },
   downloadTitle: {
     hu: 'Letöltés önálló HTML fájlként (hanggal)',
     en: 'Download as offline HTML file (with audio)',
     ro: 'Descarcă ca fișier HTML independent (cu sunet)',
     de: 'Als eigenständige HTML-Datei herunterladen (mit Ton)'
-  },
-  downloadBtn: {
-    hu: 'Letöltés HTML-ként',
-    en: 'Export HTML',
-    ro: 'Descarcă HTML',
-    de: 'Als HTML exportieren'
   },
   soundOn: { hu: 'Hang Be', en: 'Sound On', ro: 'Sunet Pornit', de: 'Ton An' },
   playSound: { hu: 'Hang Indítása', en: 'Play Sound', ro: 'Pornește Sunetul', de: 'Ton Abspielen' },
@@ -92,6 +80,7 @@ const T = {
     ro: 'Tipul și Caracterul Sunetului Marin',
     de: 'Meeresklang-Profil & Charakter'
   },
+  languageLabel: { hu: 'Nyelv', en: 'Language', ro: 'Limbă', de: 'Sprache' },
   volumeLabel: { hu: 'Hangerő', en: 'Volume', ro: 'Volum', de: 'Lautstärke' },
   windLabel: {
     hu: 'Szélsebesség & Horizont Mélységélesség',
@@ -687,7 +676,7 @@ export default function App() {
       /* storage unavailable: fall through to the media query */
     }
     try {
-      return !window.matchMedia('(max-height: 520px)').matches;
+      return !window.matchMedia('(max-height: 520px), (max-width: 767px)').matches;
     } catch {
       return true;
     }
@@ -1541,107 +1530,120 @@ ${oceanAudioSource}
         )}
       </div>
 
-      {/* TOP HEADER */}
+      {/* PANEL TOGGLE — the only control on a clean screen */}
       {!isZenMode && (
-        <header className="absolute top-0 inset-x-0 px-1.5 py-3 md:px-6 md:py-6 z-20 pointer-events-auto bg-gradient-to-b from-slate-950/85 via-slate-950/40 to-transparent backdrop-blur-[2px]">
-          {/* Mobilon két sor (cím / vezérlők), md-től visszaáll az egysoros fejléc */}
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-4">
-            {/* 1. sor: a rövid cím egy sorban. Az alcím csak md-től fér el alá. */}
-            <div className="min-w-0">
-              <h1 className="truncate text-lg md:text-xl font-bold tracking-tight bg-gradient-to-r from-amber-200 via-orange-100 to-amber-300 bg-clip-text text-transparent">
-                {t('title')}
-              </h1>
-              <p className="hidden md:flex text-xs text-slate-300/80 items-center gap-1.5 font-medium">
-                <Compass className="w-3.5 h-3.5 text-amber-400" />
-                {t('subtitle')}
-              </p>
-            </div>
-
-            {/* 2. sor mobilon: balra hang + teljes képernyő, jobbra a négy nyelvgomb.
-                md-től a `contents` feloldja a bal oldali csoportot, így az elemek
-                az outer flexbe kerülnek, és az order-* visszaadja az eredeti
-                (letöltés → hang → nyelvek → zen) sorrendet. */}
-            <div className="flex items-center justify-between gap-2 md:justify-end md:gap-3">
-              <div className="flex items-center gap-2 md:contents">
-                {/* Download Standalone HTML Button — mobilon nincs rá hely */}
-                <button
-                  onClick={downloadStandaloneHtml}
-                  className={`hidden md:inline-flex md:order-1 min-h-11 min-w-11 justify-center px-3 py-2 rounded-xl ${GLASS_ACTIVE} hover:bg-amber-400/25 text-xs font-semibold items-center gap-1.5 transition-all shadow-md`}
-                  title={t('downloadTitle')}
-                >
-                  <Download className="w-4 h-4 text-amber-400" />
-                  <span className="hidden sm:inline">{t('downloadBtn')}</span>
-                </button>
-
-                {/* Audio Toggle */}
-                <button
-                  onClick={toggleAudio}
-                  className={`md:order-2 min-h-11 min-w-11 justify-center px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all duration-300 shadow-md ${
-                    isPlayingAudio
-                      ? `${GLASS_ACTIVE} shadow-amber-400/15 hover:bg-amber-400/25`
-                      : 'bg-slate-900/80 text-slate-200 border border-slate-700/60 hover:bg-slate-800'
-                  }`}
-                >
-                  {isPlayingAudio ? <Volume2 className="w-4 h-4 animate-pulse" /> : <VolumeX className="w-4 h-4" />}
-                  <span className="hidden sm:inline">
-                    {isPlayingAudio ? t('soundOn') : t('playSound')}
-                  </span>
-                </button>
-
-                {/* Zen Mode */}
-                <button
-                  onClick={() => setIsZenMode(true)}
-                  className="md:order-4 min-h-11 min-w-11 flex items-center justify-center p-2 rounded-xl bg-slate-900/80 border border-slate-700/60 text-slate-300 hover:text-amber-300 hover:bg-slate-800 transition-all"
-                  title={t('zenView')}
-                >
-                  <Maximize className="w-4 h-4" />
-                </button>
-
-                {/* Panel show/hide */}
-                <button
-                  onClick={() => setIsPanelOpen((v) => !v)}
-                  aria-expanded={isPanelOpen}
-                  aria-controls="control-panel"
-                  aria-label={isPanelOpen ? t('panelHide') : t('panelShow')}
-                  className="md:order-5 min-h-11 min-w-11 flex items-center justify-center p-2 rounded-xl bg-slate-900/80 border border-slate-700/60 text-slate-300 hover:text-amber-300 hover:bg-slate-800 transition-all"
-                  title={isPanelOpen ? t('panelHide') : t('panelShow')}
-                >
-                  {isPanelOpen ? <PanelBottomClose className="w-4 h-4" /> : <PanelBottomOpen className="w-4 h-4" />}
-                </button>
-              </div>
-
-              {/* Language Switcher — négy nyelv, az aktívon az egységes üveg-stílus */}
-              <div className="md:order-3 flex items-center gap-1">
-                {LANGS.map((code) => (
-                  <button
-                    key={code}
-                    onClick={() => setLang(code)}
-                    aria-pressed={lang === code}
-                    className={`min-h-11 min-w-11 px-2 py-1.5 rounded-lg text-xs font-bold uppercase transition-all ${
-                      lang === code
-                        ? GLASS_ACTIVE
-                        : 'border border-slate-700/60 bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800'
-                    }`}
-                  >
-                    {code}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </header>
+        <button
+          onClick={() => setIsPanelOpen((v) => !v)}
+          aria-expanded={isPanelOpen}
+          aria-controls="control-panel"
+          aria-label={isPanelOpen ? t('panelHide') : t('panelShow')}
+          title={isPanelOpen ? t('panelHide') : t('panelShow')}
+          className={`fixed top-3 right-3 md:top-4 md:right-4 z-30 min-h-11 min-w-11 flex items-center justify-center rounded-xl ${GLASS_PANEL} text-slate-200 hover:text-amber-300 transition-colors pointer-events-auto`}
+        >
+          {isPanelOpen ? (
+            <>
+              <PanelRightClose className="hidden md:block w-5 h-5" />
+              <PanelBottomClose className="md:hidden w-5 h-5" />
+            </>
+          ) : (
+            <>
+              <PanelRightOpen className="hidden md:block w-5 h-5" />
+              <PanelBottomOpen className="md:hidden w-5 h-5" />
+            </>
+          )}
+          {isPlayingAudio && (
+            <span aria-hidden="true" className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400" />
+          )}
+        </button>
       )}
 
       {/* CONTROL HUD */}
       {!isZenMode && (
-        <div id="control-panel" className={`${isPanelOpen ? '' : 'hidden '}absolute bottom-2 left-2 right-2 md:bottom-4 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-full md:max-w-xl z-20 pointer-events-auto`}>
+        <div
+          id="control-panel"
+          ref={panelRef}
+          onScroll={updateScrollHint}
+          className={`${isPanelOpen ? 'absolute bottom-2 left-2 right-2 max-h-[min(70dvh,calc(100dvh-4.5rem))] md:top-20 md:bottom-auto md:max-h-[calc(100dvh-6rem)] md:right-4 md:left-auto md:w-[420px] md:flex md:flex-col overflow-y-auto overflow-x-hidden overscroll-contain z-20 pointer-events-auto' : 'hidden'}`}
+          // Diszkrét görgetősáv, hogy a magasság-korlát ne rondítson bele az üveghatásba
+          style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(251,191,36,0.35) transparent' }}
+        >
+
+          {/* TOP SECTION — title, download, zen, sound, volume, language */}
+          <div className={`p-3 mb-3 flex flex-col gap-2 md:shrink-0 ${GLASS_PANEL}`}>
+            <div className="flex items-center justify-between gap-2">
+              <h1 className="min-w-0 truncate text-lg font-bold tracking-tight bg-gradient-to-r from-amber-200 via-orange-100 to-amber-300 bg-clip-text text-transparent">
+                {t('title')}
+              </h1>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={downloadStandaloneHtml}
+                  aria-label={t('downloadTitle')}
+                  title={t('downloadTitle')}
+                  className="min-h-11 min-w-11 flex items-center justify-center rounded-xl bg-slate-900/80 border border-slate-700/60 text-slate-300 hover:text-amber-300 hover:bg-slate-800 transition-all"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setIsZenMode(true)}
+                  aria-label={t('zenView')}
+                  title={t('zenView')}
+                  className="min-h-11 min-w-11 flex items-center justify-center rounded-xl bg-slate-900/80 border border-slate-700/60 text-slate-300 hover:text-amber-300 hover:bg-slate-800 transition-all"
+                >
+                  <Maximize className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={toggleAudio}
+                className={`shrink-0 min-h-11 justify-center px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all duration-300 shadow-md ${
+                  isPlayingAudio
+                    ? `${GLASS_ACTIVE} shadow-amber-400/15 hover:bg-amber-400/25`
+                    : 'bg-slate-900/80 text-slate-200 border border-slate-700/60 hover:bg-slate-800'
+                }`}
+              >
+                {isPlayingAudio ? <Volume2 className="w-4 h-4 animate-pulse" /> : <VolumeX className="w-4 h-4" />}
+                <span>{isPlayingAudio ? t('soundOn') : t('playSound')}</span>
+              </button>
+              <input
+                type="range"
+                aria-label={t('volumeLabel')}
+                min="0"
+                max="1"
+                step="0.01"
+                value={audioVolume}
+                onChange={(e) => setAudioVolume(Number(e.target.value))}
+                className="range-touch range-amber w-full min-w-0 h-11 cursor-pointer"
+              />
+              <span className="text-xs text-slate-300 w-8 shrink-0 whitespace-nowrap text-right font-medium">{Math.round(audioVolume * 100)}%</span>
+            </div>
+
+            <div role="group" aria-label={t('languageLabel')} className="grid grid-cols-4 gap-1">
+              {LANGS.map((code) => (
+                <button
+                  key={code}
+                  onClick={() => setLang(code)}
+                  aria-pressed={lang === code}
+                  className={`min-h-11 px-2 py-1.5 rounded-lg text-xs font-bold uppercase transition-all ${
+                    lang === code
+                      ? GLASS_ACTIVE
+                      : 'border border-slate-700/60 bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  {code}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* TABS — mobilon vízszintesen görgethető, hogy a Timer fül se vágódjon le */}
-          <div role="tablist" className={`flex flex-nowrap items-center gap-1 whitespace-nowrap overflow-x-auto hide-scrollbar p-1.5 mb-3 ${GLASS_PANEL}`}>
+          <div role="tablist" className={`flex flex-nowrap items-center gap-1 whitespace-nowrap overflow-x-auto hide-scrollbar p-1.5 mb-3 md:shrink-0 ${GLASS_PANEL}`}>
             <button
               role="tab"
               aria-selected={activeTab === 'controls'}
               onClick={() => setActiveTab('controls')}
+              title={t('tabControls')}
               className={`shrink-0 sm:flex-1 sm:min-w-0 min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'controls' 
                   ? GLASS_ACTIVE
@@ -1649,13 +1651,14 @@ ${oceanAudioSource}
               }`}
             >
               <Sliders className="w-4 h-4 shrink-0" />
-              <span className={activeTab === 'controls' ? 'whitespace-nowrap' : 'sr-only sm:not-sr-only whitespace-nowrap'}>{t('tabControls')}</span>
+              <span className={activeTab === 'controls' ? 'whitespace-nowrap' : 'sr-only'}>{t('tabControls')}</span>
             </button>
 
             <button
               role="tab"
               aria-selected={activeTab === 'presets'}
               onClick={() => setActiveTab('presets')}
+              title={t('tabPresets')}
               className={`shrink-0 sm:flex-1 sm:min-w-0 min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'presets' 
                   ? GLASS_ACTIVE
@@ -1663,13 +1666,14 @@ ${oceanAudioSource}
               }`}
             >
               <Sparkles className="w-4 h-4 shrink-0" />
-              <span className={activeTab === 'presets' ? 'whitespace-nowrap' : 'sr-only sm:not-sr-only whitespace-nowrap'}>{t('tabPresets')}</span>
+              <span className={activeTab === 'presets' ? 'whitespace-nowrap' : 'sr-only'}>{t('tabPresets')}</span>
             </button>
 
             <button
               role="tab"
               aria-selected={activeTab === 'gallery'}
               onClick={() => setActiveTab('gallery')}
+              title={t('tabGallery')}
               className={`shrink-0 sm:flex-1 sm:min-w-0 min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'gallery' 
                   ? GLASS_ACTIVE
@@ -1677,13 +1681,14 @@ ${oceanAudioSource}
               }`}
             >
               <Image className="w-4 h-4 shrink-0" />
-              <span className={activeTab === 'gallery' ? 'whitespace-nowrap' : 'sr-only sm:not-sr-only whitespace-nowrap'}>{t('tabGallery')}</span>
+              <span className={activeTab === 'gallery' ? 'whitespace-nowrap' : 'sr-only'}>{t('tabGallery')}</span>
             </button>
 
             <button
               role="tab"
               aria-selected={activeTab === 'timer'}
               onClick={() => setActiveTab('timer')}
+              title={t('tabTimer')}
               className={`shrink-0 sm:flex-1 sm:min-w-0 min-h-11 min-w-11 py-1.5 px-2.5 rounded-xl text-xs leading-tight font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'timer' 
                   ? GLASS_ACTIVE
@@ -1691,18 +1696,14 @@ ${oceanAudioSource}
               }`}
             >
               <Clock className="w-4 h-4 shrink-0" />
-              <span className={activeTab === 'timer' ? 'whitespace-nowrap' : 'sr-only sm:not-sr-only whitespace-nowrap'}>{t('tabTimer')}</span>
+              <span className={activeTab === 'timer' ? 'whitespace-nowrap' : 'sr-only'}>{t('tabTimer')}</span>
             </button>
           </div>
 
           {/* TAB CONTENT — wrapper carries the bottom fade scroll hint */}
           <div className="relative">
           <div
-            ref={panelRef}
-            onScroll={updateScrollHint}
-            className={`p-3 md:p-3.5 text-slate-200 max-h-[52dvh] md:max-h-[62dvh] overflow-y-auto overflow-x-hidden ${GLASS_PANEL}`}
-            // Diszkrét görgetősáv, hogy a magasság-korlát ne rondítson bele az üveghatásba
-            style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(251,191,36,0.35) transparent' }}
+            className={`p-3 md:p-3.5 text-slate-200 ${GLASS_PANEL}`}
           >
             
             {/* TAB 1: CONTROLS & SOUND PROFILE */}
@@ -1715,7 +1716,7 @@ ${oceanAudioSource}
                     <Volume2 className="w-3.5 h-3.5 text-amber-400" />
                     <span>{t('soundSection')}</span>
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {SOUND_PROFILE_META.map((type) => {
                       const IconComp = type.icon;
                       const isSelected = soundType === type.id;
@@ -1846,7 +1847,7 @@ ${oceanAudioSource}
                       <span>{t('autoMood')}</span>
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {[
                       {
                         id: 'golden',
@@ -1888,24 +1889,6 @@ ${oceanAudioSource}
                     ))}
                   </div>
                 </div>
-
-                {/* Volume Slider if audio is playing */}
-                {isPlayingAudio && (
-                  <div className="pt-2 border-t border-slate-800 flex items-center gap-3">
-                    <Volume2 className="w-4 h-4 text-amber-400 shrink-0" />
-                    <input
-                      type="range"
-                      aria-label={t('volumeLabel')}
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={audioVolume}
-                      onChange={(e) => setAudioVolume(Number(e.target.value))}
-                      className="range-touch range-amber w-full h-11 cursor-pointer"
-                    />
-                    <span className="text-xs text-slate-300 w-8 shrink-0 whitespace-nowrap text-right font-medium">{Math.round(audioVolume * 100)}%</span>
-                  </div>
-                )}
               </div>
             )}
 
@@ -2018,13 +2001,13 @@ ${oceanAudioSource}
             )}
 
           </div>
+          </div>
           {canScrollMore && (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-px bottom-px h-10 rounded-b-2xl bg-gradient-to-t from-slate-950/80 to-transparent"
+              className="pointer-events-none sticky bottom-0 -mt-8 h-8 shrink-0 rounded-b-2xl bg-gradient-to-t from-slate-950/80 to-transparent"
             />
           )}
-          </div>
         </div>
       )}
 
